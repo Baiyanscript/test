@@ -1,7 +1,7 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = '20261024160540';
+const BUILD = __BUILD__;
 const VERSION = { code: 2300, name: '2.3.0' };
 
 (function syncVersion() {
@@ -1377,13 +1377,9 @@ async function restoreIdentity() {
   try {
     const rec = await dbGet('kv', 'identity');
     if (!rec) return;
-    const imported = await importPrivateKey(rec.pkcs8, 'pkcs8');
-    // importPrivateKey returns { key: CryptoKey, pubDer }; store the CryptoKey itself.
-    // Older saved identities may have stored the wrapper object, so normalize both forms.
-    const cryptoKey = imported instanceof CryptoKey ? imported : imported.key;
-    if (!(cryptoKey instanceof CryptoKey)) throw new Error('无法恢复有效的签名私钥');
+    const key = await importPrivateKey(rec.pkcs8, 'pkcs8');
     S.identity = {
-      key: cryptoKey,
+      key,
       certDer: new Uint8Array(rec.certDer),
       pubDer: new Uint8Array(rec.pubDer),
       cn: rec.cn,
@@ -1668,8 +1664,8 @@ async function loadFile(file, opts = {}) {
     renderVerify();
     renderNotice();
     renderDirty();
-    const verified = Boolean(pkg.verify && pkg.verify.rsaOk && pkg.verify.digestOk && pkg.verify.badFiles === 0);
-    setChip(verified ? 'ok' : 'warn', pkg.verify ? (verified ? '签名已校验' : '签名异常，可重新签章') : '未签名，可直接签章');
+    setChip(pkg.verify && pkg.verify.rsaOk && pkg.verify.digestOk && pkg.verify.badFiles === 0 ? 'ok' : 'warn',
+      pkg.verify ? '签名已校验' : '未签名');
 
     const v = pkg.verify;
     const ok = v && v.digestOk && v.rsaOk && v.badFiles === 0;
@@ -1684,7 +1680,7 @@ async function loadFile(file, opts = {}) {
         verified: Boolean(ok),
       }, S.settings.storeFiles ? buf : null);
     }
-    snack(`解析完成 ${Math.round(performance.now() - t0)} ms · ${v ? (ok ? '签名有效' : '签名异常，可重新签章') : '未签名，可直接签章'}`);
+    snack(`解析完成 ${Math.round(performance.now() - t0)} ms · ${v ? (ok ? '签名有效' : '签名异常') : '未签名'}`);
   } catch (e) {
     setChip('bad', '无法解析');
     snack(String(e.message || e));
@@ -1710,16 +1706,6 @@ async function doExport() {
     snack('先设置签名身份');
     return;
   }
-  // Normalize legacy/restored identity data before WebCrypto signing.
-  if (S.identity?.key && !(S.identity.key instanceof CryptoKey) && S.identity.key.key instanceof CryptoKey) {
-    S.identity.key = S.identity.key.key;
-  }
-  if (!S.identity?.key || !(S.identity.key instanceof CryptoKey)) {
-    expandSignature(true);
-    snack('签名私钥无效，请重新生成签名身份后再导出');
-    return;
-  }
-
   const patch = collectPatch();
   const err = validate(patch.manifest);
   if (err) { snack(err); return; }
@@ -2193,35 +2179,6 @@ for (const b of $('idMode').children) {
     if (S.idMode === 'auto' && !$('cnInput').value) $('cnInput').value = '';
   });
 }
-
-/* 直接签章：若尚未设置身份，自动生成后直接导出 */
-$('directSignBtn').addEventListener('click', async () => {
-  if (!S.pkg || S.busy) {
-    if (!S.pkg) snack('请先载入 RPK 或 ZIP 包');
-    return;
-  }
-  const btn = $('directSignBtn');
-  btn.disabled = true;
-  btn.classList.add('is-loading');
-  try {
-    if (!S.identity || !(S.identity.key instanceof CryptoKey)) {
-      const cn = ($('cnInput').value || '').trim() || randomCn();
-      const id = await createIdentity({ cn, days: clamp(Number($('daysInput').value) || 3650, 1, 36500), o: '', ou: '', c: '' });
-      const fp = new Uint8Array(await crypto.subtle.digest('SHA-256', id.certDer));
-      S.identity = { ...id, fingerprint: fp };
-      $('cnInput').value = cn;
-      S.idMode = 'auto';
-      await persistIdentity();
-      renderIdentity();
-    }
-    await doExport();
-  } catch (e) {
-    snack(`直接签章失败：${e.message || e}`);
-  } finally {
-    btn.disabled = false;
-    btn.classList.remove('is-loading');
-  }
-});
 
 /* 导出 */
 $('exportBtn').addEventListener('click', doExport);

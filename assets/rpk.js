@@ -262,82 +262,49 @@ function derOidString(b, node) {
 const MAGIC_BYTES = te.encode(MAGIC);
 
 export function parseSignature(bytes) {
-  // 簽名區塊是 RPK 額外附加在 ZIP 中央目錄前的資料。
-  // 無簽名、舊簽名、簽名損壞或只有殘留 Magic 時，都視為「未簽名」；
-  // 不應因此阻止 ZIP/RPK 被重新簽章。
-  try {
-    const magicPos = indexOfBytes(bytes, MAGIC_BYTES);
-    if (magicPos < 8) return { present: false };
+  const magicPos = indexOfBytes(bytes, MAGIC_BYTES);
+  if (magicPos < 0) return { present: false };
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const total = v.getInt32(magicPos - 8, true);
+  const start = magicPos + 8 - total;
+  const end = magicPos + MAGIC_BYTES.length;
 
-    const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const total = v.getInt32(magicPos - 8, true);
-    if (!Number.isFinite(total) || total <= 0) return { present: false };
-
-    const start = magicPos + 8 - total;
-    const end = magicPos + MAGIC_BYTES.length;
-    if (start < 0 || end > bytes.length || end <= start) return { present: false };
-
-    let eocd = -1;
-    for (let i = bytes.length - 22; i >= 0; i--) {
-      if (v.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-    }
-    if (eocd < 0 || eocd + 22 > bytes.length) return { present: false };
-
-    const cdOffset = v.getUint32(eocd + 16, true);
-    if (cdOffset > bytes.length) return { present: false };
-
-    const p = start + 8;
-    if (p + 16 > bytes.length || v.getInt32(p + 8, true) !== 0x01000101) {
-      return { present: false };
-    }
-
-    const valueStart = p + 16;
-    if (valueStart + 8 > bytes.length) return { present: false };
-    const sdSize = v.getInt32(valueStart + 4, true);
-    if (sdSize < 0 || valueStart + 8 + sdSize > bytes.length) return { present: false };
-
-    const signed = bytes.subarray(valueStart + 8, valueStart + 8 + sdSize);
-    if (signed.length < 56) return { present: false };
-    const sv = new DataView(signed.buffer, signed.byteOffset, signed.byteLength);
-
-    const hash = signed.subarray(16, 48);
-    const certLen = sv.getInt32(52, true);
-    if (certLen < 0 || 56 + certLen > signed.length) return { present: false };
-    const certDer = signed.subarray(56, 56 + certLen);
-
-    const sigPos = valueStart + 8 + sdSize;
-    if (sigPos + 16 > bytes.length) return { present: false };
-    const sigLen = v.getInt32(sigPos + 12, true);
-    if (sigLen < 0 || sigPos + 16 + sigLen > bytes.length) return { present: false };
-    const signature = bytes.subarray(sigPos + 16, sigPos + 16 + sigLen);
-
-    const pubLenPos = sigPos + 16 + sigLen;
-    if (pubLenPos + 4 > bytes.length) return { present: false };
-    const pubLen = v.getInt32(pubLenPos, true);
-    const pubStart = pubLenPos + 4;
-    if (pubLen < 0 || pubStart + pubLen > bytes.length) return { present: false };
-    const pubDer = bytes.subarray(pubStart, pubStart + pubLen);
-
-    const kv2 = pubStart + pubLen;
-    let fileHashes = [];
-    if (kv2 + 16 <= bytes.length) {
-      const kv2Id = v.getInt32(kv2 + 8, true);
-      if (kv2Id === 0x01000201) {
-        const valueSize = v.getInt32(kv2 + 12, true);
-        if (valueSize >= 0 && kv2 + 16 + valueSize <= bytes.length) {
-          fileHashes = readFileHashBlock(bytes.subarray(kv2 + 16, kv2 + 16 + valueSize));
-        }
-      }
-    }
-
-    return {
-      present: true, start, end, total, eocd, cdOffset,
-      certDer, pubDer, signature, signed, threeWayHash: hash, fileHashes, sdSize,
-    };
-  } catch {
-    // 任何无法识别/损坏的签名都不影响后续重新签章。
-    return { present: false };
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= 0; i--) {
+    if (v.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
   }
+  const cdOffset = v.getUint32(eocd + 16, true);
+
+  const p = start + 8;
+  if (v.getInt32(p + 8, true) !== 0x01000101) return { present: false };
+
+  const valueStart = p + 16;
+  const sdSize = v.getInt32(valueStart + 4, true);
+  const signed = bytes.subarray(valueStart + 8, valueStart + 8 + sdSize);
+  const sv = new DataView(signed.buffer, signed.byteOffset, signed.byteLength);
+
+  const hash = signed.subarray(16, 48);
+  const certLen = sv.getInt32(52, true);
+  const certDer = signed.subarray(56, 56 + certLen);
+
+  const sigPos = valueStart + 8 + sdSize;
+  const sigLen = v.getInt32(sigPos + 12, true);
+  const signature = bytes.subarray(sigPos + 16, sigPos + 16 + sigLen);
+  const pubLen = v.getInt32(sigPos + 16 + sigLen, true);
+  const pubDer = bytes.subarray(sigPos + 20 + sigLen, sigPos + 20 + sigLen + pubLen);
+
+  const kv2 = sigPos + 20 + sigLen + pubLen;
+  const kv2Id = v.getInt32(kv2 + 8, true);
+  let fileHashes = [];
+  if (kv2Id === 0x01000201) {
+    const valueSize = v.getInt32(kv2 + 12, true);
+    fileHashes = readFileHashBlock(bytes.subarray(kv2 + 16, kv2 + 16 + valueSize));
+  }
+
+  return {
+    present: true, start, end, total, eocd, cdOffset,
+    certDer, pubDer, signature, signed, threeWayHash: hash, fileHashes, sdSize,
+  };
 }
 
 function readFileHashBlock(buf) {
