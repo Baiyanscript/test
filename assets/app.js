@@ -1377,9 +1377,13 @@ async function restoreIdentity() {
   try {
     const rec = await dbGet('kv', 'identity');
     if (!rec) return;
-    const key = await importPrivateKey(rec.pkcs8, 'pkcs8');
+    const imported = await importPrivateKey(rec.pkcs8, 'pkcs8');
+    // importPrivateKey returns { key: CryptoKey, pubDer }; store the CryptoKey itself.
+    // Older saved identities may have stored the wrapper object, so normalize both forms.
+    const cryptoKey = imported instanceof CryptoKey ? imported : imported.key;
+    if (!(cryptoKey instanceof CryptoKey)) throw new Error('无法恢复有效的签名私钥');
     S.identity = {
-      key,
+      key: cryptoKey,
       certDer: new Uint8Array(rec.certDer),
       pubDer: new Uint8Array(rec.pubDer),
       cn: rec.cn,
@@ -1706,6 +1710,16 @@ async function doExport() {
     snack('先设置签名身份');
     return;
   }
+  // Normalize legacy/restored identity data before WebCrypto signing.
+  if (S.identity?.key && !(S.identity.key instanceof CryptoKey) && S.identity.key.key instanceof CryptoKey) {
+    S.identity.key = S.identity.key.key;
+  }
+  if (!S.identity?.key || !(S.identity.key instanceof CryptoKey)) {
+    expandSignature(true);
+    snack('签名私钥无效，请重新生成签名身份后再导出');
+    return;
+  }
+
   const patch = collectPatch();
   const err = validate(patch.manifest);
   if (err) { snack(err); return; }
