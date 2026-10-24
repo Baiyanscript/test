@@ -2194,6 +2194,35 @@ for (const b of $('idMode').children) {
   });
 }
 
+/* 直接签章：若尚未设置身份，自动生成后直接导出 */
+$('directSignBtn').addEventListener('click', async () => {
+  if (!S.pkg || S.busy) {
+    if (!S.pkg) snack('请先载入 RPK 或 ZIP 包');
+    return;
+  }
+  const btn = $('directSignBtn');
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  try {
+    if (!S.identity || !(S.identity.key instanceof CryptoKey)) {
+      const cn = ($('cnInput').value || '').trim() || randomCn();
+      const id = await createIdentity({ cn, days: clamp(Number($('daysInput').value) || 3650, 1, 36500), o: '', ou: '', c: '' });
+      const fp = new Uint8Array(await crypto.subtle.digest('SHA-256', id.certDer));
+      S.identity = { ...id, fingerprint: fp };
+      $('cnInput').value = cn;
+      S.idMode = 'auto';
+      await persistIdentity();
+      renderIdentity();
+    }
+    await doExport();
+  } catch (e) {
+    snack(`直接签章失败：${e.message || e}`);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+  }
+});
+
 /* 导出 */
 $('exportBtn').addEventListener('click', doExport);
 $('recentShare').addEventListener('click', async () => {
