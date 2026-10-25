@@ -1797,3 +1797,7 @@ body.sheet-open .md-page { overflow-y: hidden; }
 .md-advanced-add-menu__item { display: block; width: 100%; padding: 12px 14px; border: 0; border-radius: 9px; background: transparent; color: var(--md-on-surface); text-align: left; cursor: pointer; font: inherit; }
 .md-advanced-add-menu__item:hover { background: var(--md-surface-container-high, rgba(127,127,127,.14)); }
 .md-advanced__delete { white-space: nowrap; }
+
+/* 進階編輯：重新命名按鈕 */
+.md-advanced__rename { flex: 0 0 auto; min-height: 38px; padding-inline: 10px; white-space: nowrap; }
+@media (max-width: 520px) { .md-advanced__rename { padding-inline: 6px; min-height: 34px; font-size: 12px; } }

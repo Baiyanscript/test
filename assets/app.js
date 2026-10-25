@@ -990,10 +990,55 @@ function renderAdvancedList() {
     del.textContent = '刪除'; del.setAttribute('aria-label', `刪除${e.isDir ? '資料夾' : '檔案'} ${e.name}`);
     del.addEventListener('click', ev => { ev.stopPropagation(); e.isDir ? deleteAdvancedFolder(e.name) : deleteAdvancedFile(e.name); });
     row.appendChild(del);
+    const rename = document.createElement('button');
+    rename.type = 'button'; rename.className = 'md-btn md-btn--outlined md-advanced__rename';
+    rename.textContent = '重新命名'; rename.setAttribute('aria-label', `重新命名${e.isDir ? '資料夾' : '檔案'} ${e.name}`);
+    rename.addEventListener('click', ev => { ev.stopPropagation(); renameAdvancedEntry(e.name, e.isDir); });
+    row.appendChild(rename);
     list.appendChild(row);
   }
   if (!entries.length) list.appendChild(el('p', 'md-body-small md-muted', '此資料夾沒有檔案'));
   $('advBreadcrumb').textContent = Adv.path ? `RPK / ${Adv.path}` : 'RPK /';
+}
+
+function renameAdvancedEntry(oldName, isDir) {
+  if (!S.pkg) return;
+  const oldPath = isDir ? (oldName.endsWith('/') ? oldName : `${oldName}/`) : oldName;
+  const oldBase = (isDir ? oldPath.slice(0, -1) : oldPath).split('/').pop();
+  const input = window.prompt(`輸入新的${isDir ? '資料夾' : '檔案'}名稱：`, oldBase);
+  if (input == null) return;
+  const baseName = input.trim().replace(/[\\/]/g, '');
+  if (!baseName || baseName === '.' || baseName === '..') { snack('名稱無效'); return; }
+  if (baseName === oldBase) return;
+  const parent = oldPath.includes('/') ? oldPath.slice(0, oldPath.lastIndexOf('/') + 1) : '';
+  const newPath = `${parent}${baseName}${isDir ? '/' : ''}`;
+  const oldPrefix = isDir ? oldPath : '';
+  const conflicts = S.pkg.entries.some(entry => {
+    if (isDir) {
+      const affected = entry.name === oldPath || entry.name.startsWith(oldPrefix);
+      const targetName = affected ? newPath + entry.name.slice(oldPath.length) : entry.name;
+      return !affected && targetName === newPath;
+    }
+    return entry.name !== oldName && entry.name === newPath;
+  });
+  if (conflicts) { snack('此名稱已存在'); return; }
+  const mapName = name => isDir && (name === oldPath || name.startsWith(oldPrefix)) ? newPath + name.slice(oldPath.length) : (!isDir && name === oldName ? newPath : name);
+  for (const entry of S.pkg.entries) entry.name = mapName(entry.name);
+  for (const store of [S.fileEdits, S.images]) {
+    const moved = [];
+    for (const key of Object.keys(store)) if (mapName(key) !== key) { moved.push([key, mapName(key), store[key]]); delete store[key]; }
+    for (const [oldKey, newKey, value] of moved) store[newKey] = value;
+  }
+  if (S.sizes) {
+    const moved = [];
+    for (const [key, value] of S.sizes.entries()) if (mapName(key) !== key) { moved.push([key, mapName(key), value]); S.sizes.delete(key); }
+    for (const [oldKey, newKey, value] of moved) S.sizes.set(newKey, value);
+  }
+  if (Adv.selected && mapName(Adv.selected) !== Adv.selected) Adv.selected = mapName(Adv.selected);
+  if (Adv.path && (Adv.path === oldPath || Adv.path.startsWith(oldPrefix))) Adv.path = mapName(Adv.path);
+  $('advSearch').value = '';
+  renderAdvancedList(); renderFiles(); renderImages(); renderDirty(); updateAdvancedSummary();
+  snack(`已重新命名為 ${newPath}；匯出時會套用變更`);
 }
 
 function deleteAdvancedFile(name) {
