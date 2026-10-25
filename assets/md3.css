@@ -1772,3 +1772,8 @@ body.sheet-open .md-page { overflow-y: hidden; }
 #advText { flex: 1; min-height: 0; width: 100%; border: 0; outline: 0; resize: none; padding: 18px; background: var(--md-surface); color: var(--md-on-surface); font: 13px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }
 .md-advanced-editor-view > .md-body-small { flex: 0 0 auto; padding: 0 16px 14px; margin: 0; }
 @media (max-width: 700px) { .md-advanced__file { min-height: 62px; grid-template-columns: 46px minmax(0,1fr); } .md-advanced__file-icon { width: 42px; height: 42px; } }
+
+
+/* 進階編輯返回按鍵：使用與檔案管理器「上一層」一致的文字按鍵 */
+.md-advanced-back { flex: 0 0 auto; gap: 6px; white-space: nowrap; padding-inline: 8px; }
+.md-advanced-back svg { flex: 0 0 auto; }
