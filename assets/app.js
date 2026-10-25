@@ -1,7 +1,7 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = __BUILD__;
+const BUILD = '20261025110000';
 const VERSION = { code: 2400, name: '2.4.0' };
 
 (function syncVersion() {
