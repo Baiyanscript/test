@@ -1,8 +1,8 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = '20261025110000';
-const VERSION = { code: 2300, name: '2.3.0' };
+const BUILD = __BUILD__;
+const VERSION = { code: 2400, name: '2.4.0' };
 
 (function syncVersion() {
   if (window.__PAGE_VERSION__ === BUILD) return;
@@ -2087,7 +2087,7 @@ function renderSettingsPage() {
 
 /* ---------- 更新检查 ---------- */
 
-const UPDATE_URL = 'https://raw.githubusercontent.com/hrk666666/rpk-studio/main/version.json';
+const UPDATE_URL = 'https://raw.githubusercontent.com/Baiyanscript/test/main/version.json';
 
 async function checkUpdate(manual = false) {
   const mirror = (S.settings.updMirror || '').trim();
@@ -2106,7 +2106,7 @@ async function checkUpdate(manual = false) {
         {
           label: '前往下载',
           icon: 'M11 3h2v9.2l3.6-3.6L18 10l-6 6-6-6 1.4-1.4L11 12.2V3zM5 19h14v2H5z',
-          onPick: () => window.open(info.url || 'https://github.com/hrk666666/rpk-studio/releases', '_blank', 'noopener'),
+          onPick: () => window.open(info.url || 'https://github.com/baiyanscript/test/releases', '_blank', 'noopener'),
         },
         { label: '稍后', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v5.6l4 2.4-.9 1.5L11 13V7h2z', onPick: () => { } },
       ]);
