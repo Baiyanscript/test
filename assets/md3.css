@@ -1785,3 +1785,15 @@ body.sheet-open .md-page { overflow-y: hidden; }
 .md-advanced__file-row .md-advanced__file { flex: 1 1 auto; min-width: 0; }
 .md-advanced__delete { flex: 0 0 auto; min-height: 38px; padding-inline: 12px; color: var(--md-error, #b3261e); }
 @media (max-width: 420px) { .md-advanced__file-row { gap: 4px; } .md-advanced__delete { padding-inline: 8px; min-height: 34px; } }
+
+
+/* 進階編輯：右下角加號選單與檔案/資料夾刪除 */
+.md-advanced-actions { position: relative; min-height: 76px; align-items: center; }
+.md-advanced-fab { width: 56px; height: 56px; border: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--md-primary, #6750a4); color: var(--md-on-primary, #fff); box-shadow: 0 3px 8px rgba(0,0,0,.22); cursor: pointer; }
+.md-advanced-fab:hover { filter: brightness(1.06); }
+.md-advanced-fab:focus-visible, .md-advanced-add-menu__item:focus-visible { outline: 2px solid var(--md-primary, #6750a4); outline-offset: 3px; }
+.md-advanced-add-menu { position: absolute; right: 16px; bottom: 82px; z-index: 20; min-width: 210px; padding: 6px; border: 1px solid var(--md-outline-variant); border-radius: 14px; background: var(--md-surface-container, var(--md-surface)); box-shadow: 0 6px 24px rgba(0,0,0,.2); }
+.md-advanced-add-menu[hidden] { display: none !important; }
+.md-advanced-add-menu__item { display: block; width: 100%; padding: 12px 14px; border: 0; border-radius: 9px; background: transparent; color: var(--md-on-surface); text-align: left; cursor: pointer; font: inherit; }
+.md-advanced-add-menu__item:hover { background: var(--md-surface-container-high, rgba(127,127,127,.14)); }
+.md-advanced__delete { white-space: nowrap; }

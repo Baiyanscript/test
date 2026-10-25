@@ -389,7 +389,14 @@ window.addEventListener('error', function (e) {
       <div class="md-advanced__file-list md-advanced__file-list--browser" id="advFileList"></div>
       <div class="md-advanced-actions">
         <input id="advAddFilesInput" type="file" multiple hidden>
-        <button class="md-btn md-btn--filled" id="advAddFiles" type="button">增加檔案</button>
+        <div class="md-advanced-add-menu" id="advAddMenu" hidden>
+          <button class="md-advanced-add-menu__item" id="advCreateFile" type="button">新增空白檔案</button>
+          <button class="md-advanced-add-menu__item" id="advCreateFolder" type="button">新增資料夾</button>
+          <button class="md-advanced-add-menu__item" id="advUploadFiles" type="button">從電腦上傳檔案</button>
+        </div>
+        <button class="md-advanced-fab" id="advAddFiles" type="button" aria-label="新增檔案或資料夾" aria-expanded="false" title="新增檔案或資料夾">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+        </button>
       </div>
     </div>
 
