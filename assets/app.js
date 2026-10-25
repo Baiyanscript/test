@@ -845,6 +845,8 @@ const Adv = {
   original: null,
   dirty: false,
   editing: false,
+  previewUrl: '',
+  isImage: false,
 };
 
 function updateAdvancedSummary() {
@@ -1152,28 +1154,64 @@ async function addAdvancedFiles(fileList) {
   snack(`已新增 ${added} 個檔案${replaced ? `，取代 ${replaced} 個檔案` : ''}；匯出時會套用變更`);
 }
 
+function advancedImageMime(name, bytes) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const byExt = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', jpe:'image/jpeg', gif:'image/gif', webp:'image/webp', bmp:'image/bmp', svg:'image/svg+xml', ico:'image/x-icon', avif:'image/avif', apng:'image/apng' };
+  if (byExt[ext]) return byExt[ext];
+  if (bytes.length >= 8 && bytes[0]===137 && bytes[1]===80 && bytes[2]===78 && bytes[3]===71) return 'image/png';
+  if (bytes.length >= 3 && bytes[0]===255 && bytes[1]===216 && bytes[2]===255) return 'image/jpeg';
+  if (bytes.length >= 6 && String.fromCharCode(...bytes.slice(0,6)).match(/^GIF8[79]a$/)) return 'image/gif';
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0,4))==='RIFF' && String.fromCharCode(...bytes.slice(8,12))==='WEBP') return 'image/webp';
+  return '';
+}
+
 function openAdvancedFile(name) {
   if (!S.pkg) return;
   const e = advEntry(name); if (!e || e.isDir) return;
+  if (Adv.previewUrl) { URL.revokeObjectURL(Adv.previewUrl); Adv.previewUrl = ''; }
   Adv.selected = name; Adv.original = advCurrentBytes(name).slice(); Adv.dirty = false; Adv.editing = true;
   const bytes = Adv.original;
-  Adv.mode = isLikelyText(bytes, name) ? 'text' : 'hex';
-  const area = $('advText'); area.disabled = false;
-  if (Adv.mode === 'text') {
-    const d = decodeText(bytes); area.value = d.text; area.dataset.encoding = d.encoding;
-    $('advFileMeta').textContent = `${fmtSize(bytes.length)} · ${d.encoding} · 文字檔`;
-    $('advHint').textContent = '修改完成後按「保存」，會返回上一個資料夾。';
-  } else {
-    area.value = bytesToHex(bytes); area.dataset.encoding = 'HEX';
-    $('advFileMeta').textContent = `${fmtSize(bytes.length)} · HEX · 二進位檔案`;
-    $('advHint').textContent = '二進位檔案以 HEX 編輯。保存後會返回上一個資料夾。';
+  const area = $('advText');
+  let preview = $('advImagePreview');
+  if (!preview) {
+    preview = document.createElement('div'); preview.id = 'advImagePreview'; preview.className = 'md-advanced-image-preview'; preview.hidden = true;
+    const img = document.createElement('img'); img.alt = '圖片預覽'; img.id = 'advImagePreviewImg';
+    preview.appendChild(img); area.parentNode.insertBefore(preview, area);
   }
+  const imgMime = advancedImageMime(name, bytes);
+  Adv.isImage = !!imgMime;
+  preview.hidden = !Adv.isImage;
+  area.hidden = Adv.isImage;
+  if (Adv.isImage) {
+    Adv.mode = 'image';
+    Adv.previewUrl = URL.createObjectURL(new Blob([bytes], { type: imgMime }));
+    $('advImagePreviewImg').src = Adv.previewUrl;
+    $('advFileMeta').textContent = `${fmtSize(bytes.length)} · 圖片 · ${imgMime}`;
+    $('advHint').textContent = '圖片預覽模式；此處不會修改圖片內容。';
+    $('advSave').disabled = true; $('advRevert').disabled = true;
+  } else {
+    Adv.mode = isLikelyText(bytes, name) ? 'text' : 'hex';
+    if (Adv.mode === 'text') {
+      const d = decodeText(bytes); area.value = d.text; area.dataset.encoding = d.encoding;
+      $('advFileMeta').textContent = `${fmtSize(bytes.length)} · ${d.encoding} · 文字檔`;
+      $('advHint').textContent = '修改完成後按「保存」，會返回上一個資料夾。';
+    } else {
+      area.value = bytesToHex(bytes); area.dataset.encoding = 'HEX';
+      $('advFileMeta').textContent = `${fmtSize(bytes.length)} · HEX · 二進位檔案`;
+      $('advHint').textContent = '二進位檔案以 HEX 編輯。保存後會返回上一個資料夾。';
+    }
+    $('advSave').disabled = false; $('advRevert').disabled = false;
+  }
+  area.disabled = false;
   $('advFileName').textContent = name;
-  $('advSave').disabled = false; $('advRevert').disabled = false;
   $('advancedBrowser').hidden = true; $('advancedEditor').hidden = false;
 }
 
 function openAdvancedBrowser() {
+  if (Adv.previewUrl) { URL.revokeObjectURL(Adv.previewUrl); Adv.previewUrl = ''; }
+  Adv.isImage = false;
+  const imagePreview = $('advImagePreview'); if (imagePreview) imagePreview.hidden = true;
+  $('advText').hidden = false;
   Adv.editing = false; Adv.selected = ''; Adv.original = null; Adv.dirty = false;
   $('advancedBrowser').hidden = false; $('advancedEditor').hidden = true;
   $('advSearch').value = ''; renderAdvancedList();
@@ -1186,7 +1224,7 @@ function openAdvancedEditor() {
 }
 
 function saveAdvancedFile() {
-  if (!Adv.selected || !S.pkg || !Adv.original) return;
+  if (Adv.isImage || !Adv.selected || !S.pkg || !Adv.original) return;
   try {
     const bytes = Adv.mode === 'text' ? encodeText($('advText').value, $('advText').dataset.encoding || 'UTF-8') : hexToBytes($('advText').value);
     S.fileEdits[Adv.selected] = bytes;
@@ -1201,7 +1239,7 @@ function saveAdvancedFile() {
 }
 
 function revertAdvancedFile() {
-  if (!Adv.selected || !S.pkg) return;
+  if (Adv.isImage || !Adv.selected || !S.pkg) return;
   delete S.fileEdits[Adv.selected];
   const saved = Adv.selected;
   Adv.editing = false; $('advancedBrowser').hidden = false; $('advancedEditor').hidden = true;

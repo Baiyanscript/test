@@ -1801,3 +1801,9 @@ body.sheet-open .md-page { overflow-y: hidden; }
 /* 進階編輯：重新命名按鈕 */
 .md-advanced__rename { flex: 0 0 auto; min-height: 38px; padding-inline: 10px; white-space: nowrap; }
 @media (max-width: 520px) { .md-advanced__rename { padding-inline: 6px; min-height: 34px; font-size: 12px; } }
+
+
+/* 進階編輯器中的圖片預覽 */
+.md-advanced-image-preview { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 18px; background: var(--md-surface-container-low, var(--md-surface)); }
+.md-advanced-image-preview[hidden] { display: none; }
+.md-advanced-image-preview img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: auto; }
