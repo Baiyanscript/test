@@ -104,7 +104,7 @@ window.addEventListener('error', function (e) {
             <div class="md-card__head">
               <div>
                 <span class="md-title-medium">进阶编辑</span>
-                <div class="md-body-small md-muted">直接编辑上传 RPK 内的文字文件内容</div>
+                <div class="md-body-small md-muted">查看、编辑上传 RPK 内的全部文件内容</div>
               </div>
               <button class="md-btn md-btn--outlined" id="openAdvancedEditor" type="button" disabled>打开编辑器</button>
             </div>
@@ -390,7 +390,7 @@ window.addEventListener('error', function (e) {
       <div class="md-advanced__editor-head">
         <div class="md-grow">
           <div class="md-body-medium" id="advFileName">选择一个文字文件</div>
-          <div class="md-body-small md-muted" id="advFileMeta">支持 UTF-8 / UTF-16 文字内容</div>
+          <div class="md-body-small md-muted" id="advFileMeta">支援文字與 HEX 二進位內容</div>
         </div>
         <button class="md-btn md-btn--text" id="advRevert" type="button" disabled>还原</button>
       </div>
@@ -632,6 +632,6 @@ window.addEventListener('error', function (e) {
 
 <div class="md-snackbar" id="snackbar" role="status" aria-live="polite"></div>
 
-<script src="assets/bundle.js?v=20261024225523" defer></script>
+<script type="module" src="assets/app.js?v=20261025110000"></script>
 </body>
 </html>
