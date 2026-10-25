@@ -967,6 +967,7 @@ function selectAdvancedFile(name) {
   const e = advEntry(name);
   if (!e || e.isDir) {
     Adv.selected = name;
+    document.getElementById('advancedLayer')?.classList.remove('is-editing');
     renderAdvancedList();
     $('advFileName').textContent = name;
     $('advFileMeta').textContent = '資料夾不可直接編輯，請選擇其中的檔案';
@@ -981,6 +982,7 @@ function selectAdvancedFile(name) {
   Adv.original = bytes.slice();
   Adv.dirty = false;
   Adv.mode = isLikelyText(bytes, name) ? 'text' : 'hex';
+  document.getElementById('advancedLayer')?.classList.add('is-editing');
   const area = $('advText');
   area.disabled = false;
   if (Adv.mode === 'text') {
@@ -1005,6 +1007,7 @@ function openAdvancedEditor() {
   if (!S.pkg) { snack('先載入一個包'); return; }
   Adv.selected = '';
   Adv.original = null;
+  document.getElementById('advancedLayer')?.classList.remove('is-editing');
   $('advSearch').value = '';
   $('advText').value = '';
   $('advText').disabled = true;
@@ -1014,6 +1017,10 @@ function openAdvancedEditor() {
   $('advFileMeta').textContent = `${S.pkg.entries.length} 項 · 可查看全部檔案內容`;
   renderAdvancedList();
   openLayer('advanced');
+}
+
+function showAdvancedFiles() {
+  document.getElementById('advancedLayer')?.classList.remove('is-editing');
 }
 
 function saveAdvancedFile() {
@@ -2332,6 +2339,7 @@ $('exportImages').addEventListener('click', async () => {
 /* 进阶文件编辑器 */
 $('openAdvancedEditor').addEventListener('click', openAdvancedEditor);
 $('advSearch').addEventListener('input', renderAdvancedList);
+$('advFilesBack').addEventListener('click', showAdvancedFiles);
 $('advText').addEventListener('input', () => { Adv.dirty = true; });
 $('advSave').addEventListener('click', saveAdvancedFile);
 $('advRevert').addEventListener('click', revertAdvancedFile);
