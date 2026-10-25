@@ -2462,6 +2462,7 @@ $('openStorage').addEventListener('click', async () => {
   await updateStorageHint();
   openLayer('storage');
 });
+$('storageLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
 $('openTerms').addEventListener('click', () => openGate('view'));
 
 $('stRecord').addEventListener('change', e => { S.settings.record = e.target.checked; saveSettings(); });
