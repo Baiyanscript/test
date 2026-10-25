@@ -819,6 +819,7 @@ function collectPatch() {
     manifestText: S.pkg && changed(S.pkg.manifest, m) ? JSON.stringify(m, null, 2) + '\n' : null,
     watchText: (S.settings.optWatch && watch && changed(S.pkg.watch, watch)) ? JSON.stringify(watch, null, 2) + '\n' : null,
     images: S.images,
+    files: S.fileEdits,
     manifest: m,
   };
 }
@@ -1664,6 +1665,7 @@ async function loadFile(file, opts = {}) {
     renderVerify();
     renderNotice();
     renderDirty();
+    updateAdvancedSummary();
     setChip(pkg.verify && pkg.verify.rsaOk && pkg.verify.digestOk && pkg.verify.badFiles === 0 ? 'ok' : 'warn',
       pkg.verify ? '签名已校验' : '未签名');
 
@@ -2039,6 +2041,7 @@ renderForm();
 renderIdentity();
 renderSettingsPage();
 renderHistory();
+updateAdvancedSummary();
 initConsent();
 restoreIdentity().then(() => updateStorageHint());
 $('topTitle').textContent = PAGES[0].label;
@@ -2114,6 +2117,14 @@ $('exportImages').addEventListener('click', async () => {
   await saveBlob(`${S.pkg.manifest?.package || 'rpk'}-images.zip`, out);
   snack(`已导出 ${files.length} 张图片`);
 });
+
+/* 进阶文件编辑器 */
+$('openAdvancedEditor').addEventListener('click', openAdvancedEditor);
+$('advSearch').addEventListener('input', renderAdvancedList);
+$('advText').addEventListener('input', () => { Adv.dirty = true; });
+$('advSave').addEventListener('click', saveAdvancedFile);
+$('advRevert').addEventListener('click', revertAdvancedFile);
+$('advancedLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
 
 /* 编辑器 */
 for (const b of $('edModes').children) {

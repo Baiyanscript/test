@@ -540,6 +540,17 @@ export async function repack(pkg, patch, identity, onProgress) {
     }
   }
 
+  // 进阶编辑器写入普通文字文件。
+  for (const [name, bytes] of Object.entries(patch.files || {})) {
+    if (name === CERT || name.startsWith('META-INF/')) continue;
+    const e = entries.find(x => x.name === name);
+    if (!e || e.isDir) continue;
+    e.data = bytes;
+    e.method = 8;
+    e.reuseRaw = false;
+    e.raw = null;
+  }
+
   // 1) 重算 hash.json → CERT
   const digests = {};
   const need = entries.filter(e => !e.isDir && !isMeta(e.name));
