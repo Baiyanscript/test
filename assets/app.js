@@ -2582,6 +2582,7 @@ $('edZoom').addEventListener('input', e => {
   draw();
 });
 $('edCircle').addEventListener('change', e => { Ed.circle = e.target.checked; draw(); });
+$('editorLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
 $('edApply').addEventListener('click', applyEditor);
 $('edPick').addEventListener('click', () => { S.pending = { name: Ed.name }; $('imageInput').click(); });
 
