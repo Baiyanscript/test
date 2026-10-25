@@ -1,7 +1,7 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = __BUILD__;
+const BUILD = '20261025110000';
 const VERSION = { code: 2300, name: '2.3.0' };
 
 (function syncVersion() {
@@ -77,6 +77,7 @@ const S = {
   tbOs: 'os4',
   tbCatalog: null,
   history: [],
+  fileEdits: {},
 };
 
 /* ---------- 提示 / 遮罩 ---------- */
@@ -766,6 +767,7 @@ function renderForm() {
   }
   $('pickIcon').disabled = !on;
   $('search').disabled = !on;
+  $('openAdvancedEditor').disabled = !on;
   updateFab();
   renderIcon();
   if (!on) $('detailState').textContent = '载入包后可编辑';
@@ -793,11 +795,12 @@ function renderIcon() {
 function renderDirty() {
   if (!S.pkg) { $('detailState').textContent = '载入包后可编辑'; return; }
   const dirty = Object.keys(S.images).length;
+  const fileDirty = Object.keys(S.fileEdits).length;
   const m = collectPatch().manifest;
   const changed = m.name !== S.pkg.manifest.name || m.package !== S.pkg.manifest.package
     || m.versionName !== S.pkg.manifest.versionName || Number(m.versionCode) !== Number(S.pkg.manifest.versionCode);
-  $('detailState').textContent = (changed || dirty)
-    ? `已修改${dirty ? ` · ${dirty} 张图` : ''}，导出时生效`
+  $('detailState').textContent = (changed || dirty || fileDirty)
+    ? `已修改${dirty ? ` · ${dirty} 张图` : ''}${fileDirty ? ` · ${fileDirty} 个文件` : ''}，导出时生效`
     : '与包内一致';
   updateFab();
 }
@@ -830,6 +833,213 @@ function validate(m) {
   if (!m.versionName) return '版本名不能为空';
   if (!Number.isInteger(m.versionCode) || m.versionCode <= 0) return '版本号需为正整数';
   return null;
+}
+
+
+/* ---------- 进阶文件管理器 ---------- */
+
+const Adv = {
+  path: '',
+  selected: '',
+  mode: 'text',
+  original: null,
+  dirty: false,
+};
+
+function updateAdvancedSummary() {
+  const box = $('advancedSummary');
+  const btn = $('openAdvancedEditor');
+  if (!box || !btn) return;
+  if (!S.pkg) {
+    box.textContent = '载入包后可查看和编辑全部文件';
+    btn.disabled = true;
+    return;
+  }
+  const dirs = S.pkg.entries.filter(e => e.isDir).length;
+  const files = S.pkg.entries.filter(e => !e.isDir).length;
+  const changed = Object.keys(S.fileEdits).length + Object.keys(S.images).length;
+  box.textContent = `${files} 个文件 · ${dirs} 个目录${changed ? ` · ${changed} 项待保存` : ''}`;
+  btn.disabled = false;
+}
+
+function advExt(name) {
+  const m = name.toLowerCase().match(/\.([a-z0-9]{1,12})$/);
+  return m ? m[1] : '';
+}
+
+function isLikelyText(bytes, name) {
+  const ext = advExt(name);
+  const textExt = new Set(['txt','json','js','jsc','ts','css','html','htm','xml','svg','md','csv','ini','cfg','conf','log','lua','yaml','yml','properties','sh','bat','cmd','toml','gradle','rs','c','h','cpp','hpp','java','kt','sql','py']);
+  if (textExt.has(ext)) return true;
+  if (!bytes.length) return true;
+  const sample = bytes.subarray(0, Math.min(bytes.length, 8192));
+  let bad = 0;
+  for (const b of sample) if (b === 0 || (b < 7) || (b >= 14 && b < 32)) bad++;
+  return bad / sample.length < 0.02;
+}
+
+function decodeText(bytes) {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return { text: new TextDecoder('utf-16le').decode(bytes.subarray(2)), encoding: 'UTF-16 LE' };
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return { text: new TextDecoder('utf-16be').decode(bytes.subarray(2)), encoding: 'UTF-16 BE' };
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return { text: new TextDecoder('utf-8').decode(bytes.subarray(3)), encoding: 'UTF-8 BOM' };
+  return { text: new TextDecoder('utf-8', { fatal: false }).decode(bytes), encoding: 'UTF-8' };
+}
+
+function encodeText(text, encoding) {
+  if (encoding === 'UTF-16 LE') {
+    const out = new Uint8Array(2 + text.length * 2);
+    out[0] = 0xff; out[1] = 0xfe;
+    const v = new DataView(out.buffer);
+    for (let i = 0; i < text.length; i++) v.setUint16(2 + i * 2, text.charCodeAt(i), true);
+    return out;
+  }
+  if (encoding === 'UTF-16 BE') {
+    const out = new Uint8Array(2 + text.length * 2);
+    out[0] = 0xfe; out[1] = 0xff;
+    const v = new DataView(out.buffer);
+    for (let i = 0; i < text.length; i++) v.setUint16(2 + i * 2, text.charCodeAt(i), false);
+    return out;
+  }
+  const body = te.encode(text);
+  return encoding === 'UTF-8 BOM' ? new Uint8Array([0xef,0xbb,0xbf,...body]) : body;
+}
+
+function bytesToHex(bytes) {
+  const rows = [];
+  for (let i = 0; i < bytes.length; i += 16) {
+    const part = bytes.subarray(i, i + 16);
+    rows.push([...part].map(b => b.toString(16).padStart(2, '0')).join(' '));
+  }
+  return rows.join('\n');
+}
+
+function hexToBytes(text) {
+  const clean = text.replace(/[^0-9a-f]/gi, '');
+  if (clean.length % 2) throw new Error('十六進位內容必須是完整的位元組');
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function advEntry(name) {
+  return S.pkg?.entries.find(e => e.name === name) || null;
+}
+
+function advCurrentBytes(name) {
+  if (S.fileEdits[name]) return S.fileEdits[name];
+  const e = advEntry(name);
+  if (!e || e.isDir) return new Uint8Array(0);
+  return dataOf(e);
+}
+
+function advSetPath(name) {
+  const i = name.lastIndexOf('/');
+  return i < 0 ? '' : name.slice(0, i + 1);
+}
+
+function renderAdvancedList() {
+  const list = $('advFileList');
+  if (!list) return;
+  list.textContent = '';
+  if (!S.pkg) return;
+  const q = ($('advSearch').value || '').trim().toLowerCase();
+  const entries = S.pkg.entries.filter(e => !q || e.name.toLowerCase().includes(q));
+  $('advFileCount').textContent = String(entries.length);
+  for (const e of entries) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `md-advanced__file${e.name === Adv.selected ? ' is-selected' : ''}`;
+    const name = document.createElement('span');
+    name.className = 'md-advanced__file-name';
+    name.textContent = e.isDir ? `[資料夾] ${e.name}` : e.name;
+    const meta = document.createElement('span');
+    meta.className = 'md-advanced__file-meta';
+    meta.textContent = e.isDir ? '資料夾' : `${fmtSize(e.usize)}${S.fileEdits[e.name] ? ' · 已修改' : ''}`;
+    b.append(name, meta);
+    b.addEventListener('click', () => selectAdvancedFile(e.name));
+    list.appendChild(b);
+  }
+  if (!entries.length) list.appendChild(el('p', 'md-body-small md-muted', '找不到檔案'));
+}
+
+function selectAdvancedFile(name) {
+  if (!S.pkg) return;
+  const e = advEntry(name);
+  if (!e || e.isDir) {
+    Adv.selected = name;
+    renderAdvancedList();
+    $('advFileName').textContent = name;
+    $('advFileMeta').textContent = '資料夾不可直接編輯，請選擇其中的檔案';
+    $('advText').value = '';
+    $('advText').disabled = true;
+    $('advSave').disabled = true;
+    $('advRevert').disabled = true;
+    return;
+  }
+  Adv.selected = name;
+  const bytes = advCurrentBytes(name);
+  Adv.original = bytes.slice();
+  Adv.dirty = false;
+  Adv.mode = isLikelyText(bytes, name) ? 'text' : 'hex';
+  const area = $('advText');
+  area.disabled = false;
+  if (Adv.mode === 'text') {
+    const d = decodeText(bytes);
+    area.value = d.text;
+    area.dataset.encoding = d.encoding;
+    $('advFileMeta').textContent = `${fmtSize(bytes.length)} · ${d.encoding} · 文字檔`;
+    $('advHint').textContent = '可直接修改文字內容。保存後會在匯出 RPK 時重新計算摘要並重新簽名。';
+  } else {
+    area.value = bytesToHex(bytes);
+    area.dataset.encoding = 'HEX';
+    $('advFileMeta').textContent = `${fmtSize(bytes.length)} · HEX · 二進位檔案`;
+    $('advHint').textContent = '這是二進位檔案，以 HEX 編輯。圖片等二進位檔也會完整保留，保存時請只輸入有效的十六進位位元組。';
+  }
+  $('advFileName').textContent = name;
+  $('advSave').disabled = false;
+  $('advRevert').disabled = false;
+  renderAdvancedList();
+}
+
+function openAdvancedEditor() {
+  if (!S.pkg) { snack('先載入一個包'); return; }
+  Adv.selected = '';
+  Adv.original = null;
+  $('advSearch').value = '';
+  $('advText').value = '';
+  $('advText').disabled = true;
+  $('advSave').disabled = true;
+  $('advRevert').disabled = true;
+  $('advFileName').textContent = '選擇一個檔案';
+  $('advFileMeta').textContent = `${S.pkg.entries.length} 項 · 可查看全部檔案內容`;
+  renderAdvancedList();
+  openLayer('advanced');
+}
+
+function saveAdvancedFile() {
+  if (!Adv.selected || !S.pkg || !Adv.original) return;
+  try {
+    const bytes = Adv.mode === 'text' ? encodeText($('advText').value, $('advText').dataset.encoding || 'UTF-8') : hexToBytes($('advText').value);
+    S.fileEdits[Adv.selected] = bytes;
+    Adv.original = bytes.slice();
+    Adv.dirty = false;
+    $('advRevert').disabled = false;
+    renderAdvancedList();
+    renderDirty();
+    updateAdvancedSummary();
+    snack(`已保存 ${Adv.selected}`);
+  } catch (e) {
+    snack(`保存失敗：${e.message || e}`);
+  }
+}
+
+function revertAdvancedFile() {
+  if (!Adv.selected || !S.pkg) return;
+  delete S.fileEdits[Adv.selected];
+  selectAdvancedFile(Adv.selected);
+  renderDirty();
+  updateAdvancedSummary();
+  snack(`已還原 ${Adv.selected}`);
 }
 
 /* ---------- 文件列表 ---------- */
@@ -1649,6 +1859,7 @@ async function loadFile(file, opts = {}) {
     S.pkg = pkg;
     S.fileName = file.name;
     S.images = {};
+    S.fileEdits = {};
     S.sizes = new Map();
     for (const u of S.urls.values()) URL.revokeObjectURL(u);
     S.urls.clear();
