@@ -1,7 +1,7 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = '20261025110000';
+const BUILD = '20261025123000';
 const VERSION = { code: 2400, name: '2.4.0' };
 
 (function syncVersion() {
@@ -974,18 +974,75 @@ function renderAdvancedList() {
   }
 
   for (const e of entries) {
+    const row = document.createElement('div');
+    row.className = 'md-advanced__file-row';
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'md-advanced__file';
     const icon = document.createElement('span'); icon.className = 'md-advanced__file-icon'; icon.textContent = e.isDir ? '資料夾' : '檔案';
     const name = document.createElement('span'); name.className = 'md-advanced__file-name'; name.textContent = advItemLabel(e);
     const meta = document.createElement('span'); meta.className = 'md-advanced__file-meta';
-    meta.textContent = e.isDir ? '資料夾' : `${fmtSize(e.usize)}${S.fileEdits[e.name] ? ' · 已修改' : ''}`;
+    meta.textContent = e.isDir ? '資料夾' : `${fmtSize(S.fileEdits[e.name]?.length ?? e.usize ?? 0)}${S.fileEdits[e.name] ? ' · 已修改' : ''}`;
     b.append(icon, name, meta);
     b.addEventListener('click', () => e.isDir ? (Adv.path = e.name, $('advSearch').value = '', renderAdvancedList()) : openAdvancedFile(e.name));
-    list.appendChild(b);
+    row.appendChild(b);
+    if (!e.isDir) {
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'md-btn md-btn--outlined md-advanced__delete';
+      del.textContent = '刪除'; del.setAttribute('aria-label', `刪除檔案 ${e.name}`);
+      del.addEventListener('click', ev => { ev.stopPropagation(); deleteAdvancedFile(e.name); });
+      row.appendChild(del);
+    }
+    list.appendChild(row);
   }
   if (!entries.length) list.appendChild(el('p', 'md-body-small md-muted', '此資料夾沒有檔案'));
   $('advBreadcrumb').textContent = Adv.path ? `RPK / ${Adv.path}` : 'RPK /';
+}
+
+function deleteAdvancedFile(name) {
+  if (!S.pkg) return;
+  if (!window.confirm(`確定要刪除檔案「${name}」嗎？此變更會在重新打包匯出時生效。`)) return;
+  const index = S.pkg.entries.findIndex(e => e.name === name && !e.isDir);
+  if (index < 0) { snack('找不到這個檔案'); return; }
+  S.pkg.entries.splice(index, 1);
+  delete S.fileEdits[name];
+  delete S.images[name];
+  S.sizes?.delete(name);
+  if (Adv.selected === name) {
+    Adv.selected = ''; Adv.original = null; Adv.editing = false; Adv.dirty = false;
+    $('advancedBrowser').hidden = false; $('advancedEditor').hidden = true;
+  }
+  renderAdvancedList(); renderFiles(); renderImages();
+  renderDirty(); updateAdvancedSummary();
+  snack(`已刪除 ${name}；匯出時會套用變更`);
+}
+
+async function addAdvancedFiles(fileList) {
+  if (!S.pkg || !fileList?.length) return;
+  let added = 0, replaced = 0;
+  for (const file of fileList) {
+    const baseName = file.name.replace(/[\\/]/g, '_').trim();
+    if (!baseName || baseName === '.' || baseName === '..') continue;
+    const name = `${Adv.path || ''}${baseName}`;
+    let entry = S.pkg.entries.find(e => e.name === name && !e.isDir);
+    if (entry) {
+      if (!window.confirm(`「${name}」已存在，要以選取的檔案取代嗎？`)) continue;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      entry.data = bytes; entry.raw = null; entry.method = 8; entry.reuseRaw = false; entry.usize = bytes.length;
+      S.fileEdits[name] = bytes;
+      replaced++;
+    } else {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const now = new Date();
+      const mtime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+      const mdate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+      S.pkg.entries.push({ name, data: bytes, raw: null, isDir: false, method: 8, flags: 0, mtime, mdate, usize: bytes.length, csize: bytes.length, crc: 0, reuseRaw: false });
+      S.fileEdits[name] = bytes;
+      added++;
+    }
+  }
+  $('advSearch').value = '';
+  renderAdvancedList(); renderFiles(); renderDirty(); updateAdvancedSummary();
+  snack(`已新增 ${added} 個檔案${replaced ? `，取代 ${replaced} 個檔案` : ''}；匯出時會套用變更`);
 }
 
 function openAdvancedFile(name) {
@@ -2334,6 +2391,15 @@ $('exportImages').addEventListener('click', async () => {
 /* 进阶文件编辑器 */
 $('openAdvancedEditor').addEventListener('click', openAdvancedEditor);
 $('advSearch').addEventListener('input', renderAdvancedList);
+$('advAddFiles').addEventListener('click', () => {
+  if (!S.pkg) { snack('先載入一個包'); return; }
+  $('advAddFilesInput').click();
+});
+$('advAddFilesInput').addEventListener('change', async e => {
+  try { await addAdvancedFiles(e.target.files); }
+  catch (err) { snack(`新增檔案失敗：${err.message || err}`); }
+  finally { e.target.value = ''; }
+});
 $('advText').addEventListener('input', () => { Adv.dirty = true; });
 $('advSave').addEventListener('click', saveAdvancedFile);
 $('advRevert').addEventListener('click', revertAdvancedFile);

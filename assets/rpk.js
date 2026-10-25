@@ -540,15 +540,20 @@ export async function repack(pkg, patch, identity, onProgress) {
     }
   }
 
-  // 进阶编辑器写入普通文字文件。
+  // 进阶编辑器写入、增加普通文件；已从 pkg.entries 删除的文件不会被重新打包。
   for (const [name, bytes] of Object.entries(patch.files || {})) {
     if (name === CERT || name.startsWith('META-INF/')) continue;
-    const e = entries.find(x => x.name === name);
-    if (!e || e.isDir) continue;
-    e.data = bytes;
-    e.method = 8;
-    e.reuseRaw = false;
-    e.raw = null;
+    let e = entries.find(x => x.name === name);
+    if (!e) {
+      const now = dosNow();
+      e = { name, data: bytes, isDir: false, method: 8, flags: 0, ...now, reuseRaw: false, raw: null };
+      entries.push(e);
+    } else if (!e.isDir) {
+      e.data = bytes;
+      e.method = 8;
+      e.reuseRaw = false;
+      e.raw = null;
+    }
   }
 
   // 1) 重算 hash.json → CERT
