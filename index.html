@@ -100,6 +100,17 @@ window.addEventListener('error', function (e) {
             <p class="md-body-small md-muted" id="detailState">载入包后可编辑</p>
           </div>
 
+          <div class="md-card md-card--outlined">
+            <div class="md-card__head">
+              <div>
+                <span class="md-title-medium">进阶编辑</span>
+                <div class="md-body-small md-muted">直接编辑上传 RPK 内的文字文件内容</div>
+              </div>
+              <button class="md-btn md-btn--outlined" id="openAdvancedEditor" type="button" disabled>打开编辑器</button>
+            </div>
+            <div class="md-advanced-summary" id="advancedSummary">载入包后可编辑文件</div>
+          </div>
+
           <div class="md-card md-card--filled">
             <div class="md-card__head"><span class="md-title-medium">应用图标</span></div>
             <div class="md-icon-row">
@@ -349,6 +360,45 @@ window.addEventListener('error', function (e) {
 </div>
 
 <nav class="md-nav-bar" id="navBar" aria-label="主导航"></nav>
+
+<!-- 进阶文件编辑 -->
+<section class="md-layer" id="advancedLayer" data-layer="advanced" aria-hidden="true">
+  <header class="md-layer__bar">
+    <button class="md-icon-btn" type="button" data-back aria-label="返回">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M20 11H7.8l5.6-5.6L12 4l-1.4 1.4L12 13h8v-2z"/>
+      </svg>
+    </button>
+    <div class="md-layer__titles">
+      <h2 class="md-layer__title">进阶编辑</h2>
+      <p class="md-body-small md-muted" id="advSub">—</p>
+    </div>
+    <button class="md-btn md-btn--filled" id="advSave" type="button" disabled>保存</button>
+  </header>
+  <div class="md-advanced">
+    <aside class="md-advanced__files">
+      <div class="md-advanced__files-head">
+        <span class="md-title-small">文件</span>
+        <span class="md-chip" id="advFileCount">0</span>
+      </div>
+      <label class="md-search md-search--dense">
+        <input id="advSearch" placeholder="筛选文件路径" spellcheck="false">
+      </label>
+      <div class="md-advanced__file-list" id="advFileList"></div>
+    </aside>
+    <main class="md-advanced__editor">
+      <div class="md-advanced__editor-head">
+        <div class="md-grow">
+          <div class="md-body-medium" id="advFileName">选择一个文字文件</div>
+          <div class="md-body-small md-muted" id="advFileMeta">支持 UTF-8 / UTF-16 文字内容</div>
+        </div>
+        <button class="md-btn md-btn--text" id="advRevert" type="button" disabled>还原</button>
+      </div>
+      <textarea id="advText" spellcheck="false" disabled placeholder="从左侧选择可编辑的文件"></textarea>
+      <p class="md-body-small md-muted" id="advHint">修改后点击右上角“保存”。导出 RPK 时会重新计算文件摘要并重新签名。</p>
+    </main>
+  </div>
+</section>
 
 <!-- 图片调整 -->
 <section class="md-layer md-layer--editor" id="editorLayer" data-layer="editor" aria-hidden="true">

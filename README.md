@@ -1,4 +1,4 @@
-# RPK Studio
+﻿# RPK Studio
 
 浏览器里解析、修改并重新签名 Vela 平台的 RPK 分发包。全部计算在本机完成，文件不上传。
 
