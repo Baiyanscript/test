@@ -2423,6 +2423,7 @@ $('toolDisguise').addEventListener('click', async () => {
   openLayer('tb');
   await renderToolbox();
 });
+$('tbLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
 for (const b of $('tbTabs').children) {
   b.addEventListener('click', async () => {
     S.tbOs = b.dataset.os;
