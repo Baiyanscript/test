@@ -844,6 +844,7 @@ const Adv = {
   mode: 'text',
   original: null,
   dirty: false,
+  editing: false,
 };
 
 function updateAdvancedSummary() {
@@ -874,7 +875,7 @@ function isLikelyText(bytes, name) {
   if (!bytes.length) return true;
   const sample = bytes.subarray(0, Math.min(bytes.length, 8192));
   let bad = 0;
-  for (const b of sample) if (b === 0 || (b < 7) || (b >= 14 && b < 32)) bad++;
+  for (const b of sample) if (b === 0 || b < 7 || (b >= 14 && b < 32)) bad++;
   return bad / sample.length < 0.02;
 }
 
@@ -887,18 +888,12 @@ function decodeText(bytes) {
 
 function encodeText(text, encoding) {
   if (encoding === 'UTF-16 LE') {
-    const out = new Uint8Array(2 + text.length * 2);
-    out[0] = 0xff; out[1] = 0xfe;
-    const v = new DataView(out.buffer);
-    for (let i = 0; i < text.length; i++) v.setUint16(2 + i * 2, text.charCodeAt(i), true);
-    return out;
+    const out = new Uint8Array(2 + text.length * 2); out[0] = 0xff; out[1] = 0xfe;
+    const v = new DataView(out.buffer); for (let i = 0; i < text.length; i++) v.setUint16(2 + i * 2, text.charCodeAt(i), true); return out;
   }
   if (encoding === 'UTF-16 BE') {
-    const out = new Uint8Array(2 + text.length * 2);
-    out[0] = 0xfe; out[1] = 0xff;
-    const v = new DataView(out.buffer);
-    for (let i = 0; i < text.length; i++) v.setUint16(2 + i * 2, text.charCodeAt(i), false);
-    return out;
+    const out = new Uint8Array(2 + text.length * 2); out[0] = 0xfe; out[1] = 0xff;
+    const v = new DataView(out.buffer); for (let i = 0; i < text.length; i++) v.setUint16(2 + i * 2, text.charCodeAt(i), false); return out;
   }
   const body = te.encode(text);
   return encoding === 'UTF-8 BOM' ? new Uint8Array([0xef,0xbb,0xbf,...body]) : body;
@@ -906,10 +901,7 @@ function encodeText(text, encoding) {
 
 function bytesToHex(bytes) {
   const rows = [];
-  for (let i = 0; i < bytes.length; i += 16) {
-    const part = bytes.subarray(i, i + 16);
-    rows.push([...part].map(b => b.toString(16).padStart(2, '0')).join(' '));
-  }
+  for (let i = 0; i < bytes.length; i += 16) rows.push([...bytes.subarray(i, i + 16)].map(b => b.toString(16).padStart(2, '0')).join(' '));
   return rows.join('\n');
 }
 
@@ -921,106 +913,112 @@ function hexToBytes(text) {
   return out;
 }
 
-function advEntry(name) {
-  return S.pkg?.entries.find(e => e.name === name) || null;
+function advEntry(name) { return S.pkg?.entries.find(e => e.name === name) || null; }
+function advCurrentBytes(name) { if (S.fileEdits[name]) return S.fileEdits[name]; const e = advEntry(name); return !e || e.isDir ? new Uint8Array(0) : dataOf(e); }
+
+function advParentPath(path) {
+  const clean = path.replace(/\/$/, '');
+  const i = clean.lastIndexOf('/');
+  return i < 0 ? '' : clean.slice(0, i + 1);
 }
 
-function advCurrentBytes(name) {
-  if (S.fileEdits[name]) return S.fileEdits[name];
-  const e = advEntry(name);
-  if (!e || e.isDir) return new Uint8Array(0);
-  return dataOf(e);
+function advDisplayName(path) {
+  const clean = path.replace(/\/$/, '');
+  if (!clean) return 'RPK 根目錄';
+  return clean.split('/').pop();
 }
 
-function advSetPath(name) {
-  const i = name.lastIndexOf('/');
-  return i < 0 ? '' : name.slice(0, i + 1);
+function advDirectEntries(path) {
+  if (!S.pkg) return [];
+  const prefix = path;
+  const map = new Map();
+  for (const e of S.pkg.entries) {
+    if (e.name === prefix) continue;
+    if (!e.name.startsWith(prefix)) continue;
+    const rest = e.name.slice(prefix.length);
+    if (!rest) continue;
+    const slash = rest.indexOf('/');
+    if (slash < 0) {
+      map.set(e.name, e);
+    } else {
+      const dirName = prefix + rest.slice(0, slash + 1);
+      if (!map.has(dirName)) map.set(dirName, { name: dirName, isDir: true, usize: 0 });
+    }
+  }
+  return [...map.values()].sort((a,b) => {
+    if (!!a.isDir !== !!b.isDir) return a.isDir ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function advItemLabel(e) {
+  const raw = e.name.endsWith('/') ? e.name.slice(0,-1) : e.name;
+  return raw.slice(raw.lastIndexOf('/') + 1) || 'RPK 根目錄';
 }
 
 function renderAdvancedList() {
   const list = $('advFileList');
-  if (!list) return;
+  if (!list || !S.pkg) return;
   list.textContent = '';
-  if (!S.pkg) return;
   const q = ($('advSearch').value || '').trim().toLowerCase();
-  const entries = S.pkg.entries.filter(e => !q || e.name.toLowerCase().includes(q));
+  let entries = advDirectEntries(Adv.path);
+  if (q) entries = S.pkg.entries.filter(e => e.name.toLowerCase().includes(q));
   $('advFileCount').textContent = String(entries.length);
+
+  if (Adv.path) {
+    const up = document.createElement('button');
+    up.type = 'button'; up.className = 'md-advanced__file md-advanced__folder-up';
+    up.innerHTML = '<span class="md-advanced__file-icon">..</span><span class="md-advanced__file-name">上一層</span><span class="md-advanced__file-meta">返回上一個資料夾</span>';
+    up.addEventListener('click', () => { Adv.path = advParentPath(Adv.path); renderAdvancedList(); });
+    list.appendChild(up);
+  }
+
   for (const e of entries) {
     const b = document.createElement('button');
-    b.type = 'button';
-    b.className = `md-advanced__file${e.name === Adv.selected ? ' is-selected' : ''}`;
-    const name = document.createElement('span');
-    name.className = 'md-advanced__file-name';
-    name.textContent = e.isDir ? `[資料夾] ${e.name}` : e.name;
-    const meta = document.createElement('span');
-    meta.className = 'md-advanced__file-meta';
+    b.type = 'button'; b.className = 'md-advanced__file';
+    const icon = document.createElement('span'); icon.className = 'md-advanced__file-icon'; icon.textContent = e.isDir ? '資料夾' : '檔案';
+    const name = document.createElement('span'); name.className = 'md-advanced__file-name'; name.textContent = advItemLabel(e);
+    const meta = document.createElement('span'); meta.className = 'md-advanced__file-meta';
     meta.textContent = e.isDir ? '資料夾' : `${fmtSize(e.usize)}${S.fileEdits[e.name] ? ' · 已修改' : ''}`;
-    b.append(name, meta);
-    b.addEventListener('click', () => selectAdvancedFile(e.name));
+    b.append(icon, name, meta);
+    b.addEventListener('click', () => e.isDir ? (Adv.path = e.name, $('advSearch').value = '', renderAdvancedList()) : openAdvancedFile(e.name));
     list.appendChild(b);
   }
-  if (!entries.length) list.appendChild(el('p', 'md-body-small md-muted', '找不到檔案'));
+  if (!entries.length) list.appendChild(el('p', 'md-body-small md-muted', '此資料夾沒有檔案'));
+  $('advBreadcrumb').textContent = Adv.path ? `RPK / ${Adv.path}` : 'RPK /';
 }
 
-function selectAdvancedFile(name) {
+function openAdvancedFile(name) {
   if (!S.pkg) return;
-  const e = advEntry(name);
-  if (!e || e.isDir) {
-    Adv.selected = name;
-    document.getElementById('advancedLayer')?.classList.remove('is-editing');
-    renderAdvancedList();
-    $('advFileName').textContent = name;
-    $('advFileMeta').textContent = '資料夾不可直接編輯，請選擇其中的檔案';
-    $('advText').value = '';
-    $('advText').disabled = true;
-    $('advSave').disabled = true;
-    $('advRevert').disabled = true;
-    return;
-  }
-  Adv.selected = name;
-  const bytes = advCurrentBytes(name);
-  Adv.original = bytes.slice();
-  Adv.dirty = false;
+  const e = advEntry(name); if (!e || e.isDir) return;
+  Adv.selected = name; Adv.original = advCurrentBytes(name).slice(); Adv.dirty = false; Adv.editing = true;
+  const bytes = Adv.original;
   Adv.mode = isLikelyText(bytes, name) ? 'text' : 'hex';
-  document.getElementById('advancedLayer')?.classList.add('is-editing');
-  const area = $('advText');
-  area.disabled = false;
+  const area = $('advText'); area.disabled = false;
   if (Adv.mode === 'text') {
-    const d = decodeText(bytes);
-    area.value = d.text;
-    area.dataset.encoding = d.encoding;
+    const d = decodeText(bytes); area.value = d.text; area.dataset.encoding = d.encoding;
     $('advFileMeta').textContent = `${fmtSize(bytes.length)} · ${d.encoding} · 文字檔`;
-    $('advHint').textContent = '可直接修改文字內容。保存後會在匯出 RPK 時重新計算摘要並重新簽名。';
+    $('advHint').textContent = '修改完成後按「保存」，會返回上一個資料夾。';
   } else {
-    area.value = bytesToHex(bytes);
-    area.dataset.encoding = 'HEX';
+    area.value = bytesToHex(bytes); area.dataset.encoding = 'HEX';
     $('advFileMeta').textContent = `${fmtSize(bytes.length)} · HEX · 二進位檔案`;
-    $('advHint').textContent = '這是二進位檔案，以 HEX 編輯。圖片等二進位檔也會完整保留，保存時請只輸入有效的十六進位位元組。';
+    $('advHint').textContent = '二進位檔案以 HEX 編輯。保存後會返回上一個資料夾。';
   }
   $('advFileName').textContent = name;
-  $('advSave').disabled = false;
-  $('advRevert').disabled = false;
-  renderAdvancedList();
+  $('advSave').disabled = false; $('advRevert').disabled = false;
+  $('advancedBrowser').hidden = true; $('advancedEditor').hidden = false;
+}
+
+function openAdvancedBrowser() {
+  Adv.editing = false; Adv.selected = ''; Adv.original = null; Adv.dirty = false;
+  $('advancedBrowser').hidden = false; $('advancedEditor').hidden = true;
+  $('advSearch').value = ''; renderAdvancedList();
+  $('advSub').textContent = `${S.pkg.entries.filter(e => !e.isDir).length} 個檔案 · ${S.pkg.entries.filter(e => e.isDir).length} 個資料夾`;
 }
 
 function openAdvancedEditor() {
   if (!S.pkg) { snack('先載入一個包'); return; }
-  Adv.selected = '';
-  Adv.original = null;
-  document.getElementById('advancedLayer')?.classList.remove('is-editing');
-  $('advSearch').value = '';
-  $('advText').value = '';
-  $('advText').disabled = true;
-  $('advSave').disabled = true;
-  $('advRevert').disabled = true;
-  $('advFileName').textContent = '選擇一個檔案';
-  $('advFileMeta').textContent = `${S.pkg.entries.length} 項 · 可查看全部檔案內容`;
-  renderAdvancedList();
-  openLayer('advanced');
-}
-
-function showAdvancedFiles() {
-  document.getElementById('advancedLayer')?.classList.remove('is-editing');
+  Adv.path = ''; openAdvancedBrowser(); openLayer('advanced');
 }
 
 function saveAdvancedFile() {
@@ -1028,25 +1026,22 @@ function saveAdvancedFile() {
   try {
     const bytes = Adv.mode === 'text' ? encodeText($('advText').value, $('advText').dataset.encoding || 'UTF-8') : hexToBytes($('advText').value);
     S.fileEdits[Adv.selected] = bytes;
-    Adv.original = bytes.slice();
-    Adv.dirty = false;
-    $('advRevert').disabled = false;
+    Adv.original = bytes.slice(); Adv.dirty = false;
+    renderDirty(); updateAdvancedSummary();
+    const saved = Adv.selected;
+    Adv.editing = false;
+    $('advancedBrowser').hidden = false; $('advancedEditor').hidden = true;
     renderAdvancedList();
-    renderDirty();
-    updateAdvancedSummary();
-    snack(`已保存 ${Adv.selected}`);
-  } catch (e) {
-    snack(`保存失敗：${e.message || e}`);
-  }
+    snack(`已保存 ${saved}`);
+  } catch (e) { snack(`保存失敗：${e.message || e}`); }
 }
 
 function revertAdvancedFile() {
   if (!Adv.selected || !S.pkg) return;
   delete S.fileEdits[Adv.selected];
-  selectAdvancedFile(Adv.selected);
-  renderDirty();
-  updateAdvancedSummary();
-  snack(`已還原 ${Adv.selected}`);
+  const saved = Adv.selected;
+  Adv.editing = false; $('advancedBrowser').hidden = false; $('advancedEditor').hidden = true;
+  renderDirty(); updateAdvancedSummary(); renderAdvancedList(); snack(`已還原 ${saved}`);
 }
 
 /* ---------- 文件列表 ---------- */
@@ -2339,11 +2334,14 @@ $('exportImages').addEventListener('click', async () => {
 /* 进阶文件编辑器 */
 $('openAdvancedEditor').addEventListener('click', openAdvancedEditor);
 $('advSearch').addEventListener('input', renderAdvancedList);
-$('advFilesBack').addEventListener('click', showAdvancedFiles);
 $('advText').addEventListener('input', () => { Adv.dirty = true; });
 $('advSave').addEventListener('click', saveAdvancedFile);
 $('advRevert').addEventListener('click', revertAdvancedFile);
-$('advancedLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
+$('advancedLayer').querySelector('[data-back]').addEventListener('click', () => {
+  if (Adv.editing) { openAdvancedBrowser(); return; }
+  if (Adv.path) { Adv.path = advParentPath(Adv.path); renderAdvancedList(); return; }
+  closeLayer();
+});
 
 /* 编辑器 */
 for (const b of $('edModes').children) {
