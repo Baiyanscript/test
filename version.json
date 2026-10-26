@@ -1,6 +1,6 @@
 {
-  "versionCode": 2400,
-  "versionName": "2.4.0",
-  "notes": "五页结构（包 / 编辑 / 工具箱 / 历史 / 设置）；历史记录保存文件本体，可继续编辑与另存；新增系统应用伪装工具；签名与导入导出并入编辑页；原作者 hrk_。",
+  "versionCode": 2401,
+  "versionName": "2.4.1",
+  "notes": "更新至 hrk666666/rpk-studio 2.4.1；保留進階檔案管理、任意檔案上傳、建立/刪除/重新命名檔案與資料夾、二進位檔案 HEX 編輯、圖片預覽及上一層返回功能。",
   "url": "https://github.com/baiyanscript/test/releases"
 }
