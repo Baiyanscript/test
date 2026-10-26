@@ -1754,6 +1754,291 @@ body.sheet-open .md-page { overflow-y: hidden; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ============================================================
+   界面 · 模糊栏 / 圆形顶栏 / 悬浮底栏
+   ============================================================ */
+
+:root {
+  --top-blur: 0px;
+  --nav-blur: 0px;
+}
+
+/* ---------- 模糊 ---------- */
+
+body.has-top-blur .md-top-bar {
+  background: color-mix(in srgb, var(--md-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(var(--top-blur)) saturate(1.6);
+  backdrop-filter: blur(var(--top-blur)) saturate(1.6);
+}
+
+body.has-nav-blur .md-nav-bar {
+  background: color-mix(in srgb, var(--md-surface-2) 72%, transparent);
+  -webkit-backdrop-filter: blur(var(--nav-blur)) saturate(1.6);
+  backdrop-filter: blur(var(--nav-blur)) saturate(1.6);
+  border-top-color: color-mix(in srgb, var(--md-outline-variant) 45%, transparent);
+}
+
+/* ---------- 圆形顶栏 ---------- */
+
+.md-top-bar__mark {
+  display: none;
+  flex: 0 0 auto;
+  color: var(--md-primary);
+}
+
+.md-top-bar__face--top { fill: currentColor; opacity: .96; }
+.md-top-bar__face--left { fill: currentColor; opacity: .52; }
+.md-top-bar__face--right { fill: currentColor; opacity: .74; }
+
+body.top-round .md-top-bar {
+  top: calc(6px + env(safe-area-inset-top, 0px));
+  left: 14px;
+  right: auto;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  box-shadow: var(--md-elev-2);
+  overflow: hidden;
+}
+
+body.top-round .md-top-bar__mark {
+  display: block;
+  color: var(--md-on-primary-container);
+}
+
+body.top-round .md-top-bar__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+body.top-round .md-top-bar__back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 50%;
+  color: var(--md-on-primary-container);
+}
+
+body.top-round .md-top-bar__back { display: none !important; }
+
+body.top-round.has-top-blur .md-top-bar {
+  background: color-mix(in srgb, var(--md-primary-container) 74%, transparent);
+  -webkit-backdrop-filter: blur(var(--top-blur)) saturate(1.6);
+  backdrop-filter: blur(var(--top-blur)) saturate(1.6);
+}
+
+body.top-round .md-top-bar.is-hidden { transform: translateY(calc(-100% - 16px)); }
+
+@media (max-width: 400px) {
+  body.top-round .md-top-bar { left: 12px; }
+}
+
+@media (min-width: 600px) {
+  body.top-round .md-top-bar {
+    left: calc(88px + max(28px, (100vw - 968px) / 2 + 28px));
+  }
+}
+
+/* ---------- 悬浮底栏 ---------- */
+
+body.nav-floating .md-nav-bar {
+  left: 10px;
+  right: 10px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  height: 68px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
+  border-radius: var(--r-full);
+  background: var(--md-surface-3);
+  box-shadow: var(--md-elev-2);
+}
+
+body.nav-floating.has-nav-blur .md-nav-bar {
+  background: color-mix(in srgb, var(--md-surface-3) 76%, transparent);
+  border-color: color-mix(in srgb, var(--md-outline-variant) 40%, transparent);
+}
+
+body.nav-floating .md-nav-item { height: 56px; }
+body.nav-floating .md-nav-item__icon { width: min(54px, 100%); }
+body.nav-floating .md-nav-bar.is-hidden { transform: translateY(calc(100% + 16px)); }
+
+/* ---------- 设置项：带数值的滑杆 ---------- */
+
+.md-slot { padding: 4px 0 8px; }
+
+.md-slot__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0 0;
+}
+
+.md-slot__val { color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; }
+.md-slot.is-off { opacity: .45; }
+
+.md-slider--fill::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(to right,
+      var(--md-primary) 0 var(--p, 0%),
+      var(--md-surface-4) var(--p, 0%) 100%);
+}
+
+.md-slider--fill::-moz-range-track { background: var(--md-surface-4); }
+.md-slider--fill::-moz-range-progress {
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--md-primary);
+}
+
+.md-slider:disabled { opacity: .38; cursor: default; }
+.md-slider:disabled::-webkit-slider-thumb { background: var(--md-on-surface); }
+
+/* ---------- 设置子页标题 ---------- */
+
+.md-subpage {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 2px 2px;
+}
+
+.md-subpage__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  margin-left: -6px;
+  padding: 0 10px 0 2px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--md-primary);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: background .16s;
+}
+
+.md-subpage__back:hover { background: color-mix(in srgb, var(--md-primary) 8%, transparent); }
+.md-subpage__back:active { background: color-mix(in srgb, var(--md-primary) 14%, transparent); }
+.md-subpage__back svg { display: block; }
+.md-subpage h2 { margin: 4px 0 0; }
+.md-subpage p { margin: 0; }
+
+/* ---------- 滚动测试用的彩色内容 ---------- */
+
+.md-demo {
+  margin-top: 2px;
+  padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--md-outline-variant) 90%, transparent);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.md-demo__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.md-demo__line {
+  font-size: 15px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: .2px;
+}
+
+.md-demo__line--1 { color: color-mix(in srgb, #ff2d78 74%, var(--md-on-surface)); }
+.md-demo__line--2 { color: color-mix(in srgb, #0a72f5 74%, var(--md-on-surface)); }
+.md-demo__line--3 { color: color-mix(in srgb, #ff8a00 74%, var(--md-on-surface)); }
+
+.md-demo__tiles {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+
+.md-demo__tiles i { display: block; height: 46px; border-radius: 12px; }
+.md-demo__tiles i:nth-child(1) { background: linear-gradient(160deg, #ff9a9e, #f6416c); }
+.md-demo__tiles i:nth-child(2) { background: linear-gradient(160deg, #ffcf6b, #ff7a00); }
+.md-demo__tiles i:nth-child(3) { background: linear-gradient(160deg, #7af5c6, #00a878); }
+.md-demo__tiles i:nth-child(4) { background: linear-gradient(160deg, #7fd3ff, #0a72f5); }
+.md-demo__tiles i:nth-child(5) { background: linear-gradient(160deg, #c9a6ff, #6a3ce8); }
+.md-demo__tiles i:nth-child(6) { background: linear-gradient(160deg, #ffa6e0, #b5179e); }
+
+.md-demo__band {
+  height: 62px;
+  padding: 0 16px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .6px;
+}
+
+.md-demo__band--1 { background: linear-gradient(100deg, #6a5cff, #ff5f9e); }
+.md-demo__band--2 { background: linear-gradient(100deg, #00b4d8, #38ef7d); }
+
+.md-demo__tall {
+  height: 200px;
+  padding: 18px;
+  border-radius: 18px;
+  display: flex;
+  align-items: flex-end;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .6px;
+  background: linear-gradient(150deg, #ffd166, #ef476f 55%, #7209b7);
+}
+
+/* 底部色带：滚到底时正好压在栏下面，用来看模糊 */
+.md-tail {
+  height: 136px;
+  margin: 0 -14px calc(-104px - env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0;
+  background: linear-gradient(90deg,
+    #ff5f6d 0%, #ffc371 20%, #38ef7d 40%, #00b4d8 60%, #6a5cff 80%, #ff5f9e 100%);
+}
+
+@media (max-width: 400px) {
+  .md-tail { margin-left: -12px; margin-right: -12px; }
+}
+
+@media (min-width: 600px) {
+  .md-tail { height: 104px; margin: 0 -28px -56px; }
+}
+
+/* 不支持背景模糊时退回不透明背景，保证可读性 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  body.has-top-blur .md-top-bar { background: var(--md-surface); }
+  body.top-round.has-top-blur .md-top-bar { background: var(--md-primary-container); }
+  body.has-nav-blur .md-nav-bar { background: var(--md-surface-2); }
+  body.nav-floating.has-nav-blur .md-nav-bar { background: var(--md-surface-3); }
+}
+
 /* ---------- 进阶文件管理器 ---------- */
 .md-advanced-shell { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--md-surface); }
 .md-advanced-browser { height: 100%; min-height: 0; display: flex; flex-direction: column; }

@@ -1,8 +1,8 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = '20261025123000';
-const VERSION = { code: 2400, name: '2.4.0' };
+const BUILD = window.__PAGE_VERSION__ || '20261026203000';
+const VERSION = { code: 2401, name: '2.4.1' };
 
 (function syncVersion() {
   if (window.__PAGE_VERSION__ === BUILD) return;
@@ -55,6 +55,12 @@ const DEFAULT_SETTINGS = {
   autoIdentity: true,
   updAuto: true,
   updMirror: '',
+  barTopBlur: false,
+  barTopPx: 16,
+  barNavBlur: false,
+  barNavPx: 20,
+  roundTop: false,
+  barFloat: false,
 };
 
 const S = {
@@ -73,6 +79,7 @@ const S = {
   stale: false,
   lastExport: null,
   settings: { ...DEFAULT_SETTINGS },
+  settingsView: 'main',
   idMode: 'auto',
   tbOs: 'os4',
   tbCatalog: null,
@@ -266,6 +273,12 @@ function loadSettings() {
   } catch {
     S.settings = { ...DEFAULT_SETTINGS };
   }
+  const num = (v, d, a, b) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? clamp(n, a, b) : d;
+  };
+  S.settings.barTopPx = num(S.settings.barTopPx, 16, 4, 40);
+  S.settings.barNavPx = num(S.settings.barNavPx, 20, 4, 40);
 }
 
 /* ---------- 历史记录 ---------- */
@@ -414,6 +427,8 @@ function pageWidth() {
 
 function setTrack(x, animate) {
   const track = $('track');
+  const pager = $('pager');
+  if (pager.scrollLeft) pager.scrollLeft = 0;
   track.style.transition = animate ? 'transform .34s cubic-bezier(.2, 0, 0, 1)' : 'none';
   track.style.transform = `translate3d(${x}px, 0, 0)`;
 }
@@ -421,6 +436,7 @@ function setTrack(x, animate) {
 function goTo(index, animate = true) {
   index = clamp(index, 0, PAGES.length - 1);
   S.page = index;
+  if (S.settingsView === 'appearance') closeAppearancePane(true);
   setTrack(-index * pageWidth(), animate);
   for (const b of document.querySelectorAll('.md-nav-item')) {
     b.setAttribute('aria-current', Number(b.dataset.index) === index ? 'page' : 'false');
@@ -569,7 +585,7 @@ function showLayer(name) {
   el.classList.add('is-open');
   el.setAttribute('aria-hidden', 'false');
   hideNavBar();
-  $('backBtn').hidden = false;
+  syncBackBtn();
   history.pushState({ layer: name }, '', location.href);
 }
 
@@ -579,7 +595,7 @@ function hideLayer(name) {
   el.classList.remove('is-open');
   el.setAttribute('aria-hidden', 'true');
   if (S.layer === name) S.layer = null;
-  $('backBtn').hidden = true;
+  syncBackBtn();
   showNavBar();
 }
 
@@ -596,14 +612,53 @@ function closeLayer() {
   }
 }
 
-$('backBtn').addEventListener('click', () => closeLayer());
+function syncBackBtn() {
+  $('backBtn').hidden = !(S.layer || S.settingsView === 'appearance');
+}
+
+$('backBtn').addEventListener('click', () => {
+  if (S.layer) { closeLayer(); return; }
+  closeAppearancePane();
+});
 
 window.addEventListener('popstate', () => {
   if (S.layer) {
     const name = S.layer;
     hideLayer(name);
+  } else if (S.settingsView === 'appearance') {
+    closeAppearancePane(true);
   }
 });
+
+/* ---------- 设置 · 外观子页 ---------- */
+
+function openAppearancePane() {
+  if (S.settingsView === 'appearance') return;
+  const page = document.querySelector('.md-page[data-page="settings"]');
+  S.settingsScroll = page ? page.scrollTop : 0;
+  S.settingsView = 'appearance';
+  $('settingsMain').hidden = true;
+  $('appearancePane').hidden = false;
+  $('topTitle').textContent = '顶栏与底栏';
+  syncBackBtn();
+  if (page) page.scrollTop = 0;
+  renderAppearance();
+  history.pushState({ view: 'appearance' }, '', location.href);
+}
+
+function closeAppearancePane(fromPop = false) {
+  if (S.settingsView !== 'appearance') return;
+  S.settingsView = 'main';
+  $('appearancePane').hidden = true;
+  $('settingsMain').hidden = false;
+  $('topTitle').textContent = PAGES[4].label;
+  syncBackBtn();
+  const page = document.querySelector('.md-page[data-page="settings"]');
+  if (page) page.scrollTop = S.settingsScroll || 0;
+  if (!fromPop) {
+    try { history.back(); } catch { }
+  }
+}
 
 /* ---------- 底部弹层 ---------- */
 
@@ -2284,7 +2339,79 @@ function renderSettingsPage() {
   $('stIdentity').checked = S.settings.autoIdentity;
   $('optVerify').checked = S.settings.optVerify;
   $('optWatch').checked = S.settings.optWatch;
+  $('appearanceHint').textContent = appearanceSummary();
   updateStorageHint();
+}
+
+/* ---------- 顶栏与底栏 ---------- */
+
+const APPEARANCE_DEFAULTS = {
+  barTopBlur: false,
+  barTopPx: 16,
+  barNavBlur: false,
+  barNavPx: 20,
+  roundTop: false,
+  barFloat: false,
+};
+
+function appearanceSummary() {
+  const s = S.settings;
+  const on = [];
+  if (s.barTopBlur) on.push('顶栏模糊');
+  if (s.roundTop) on.push('圆形顶栏');
+  if (s.barNavBlur) on.push('底栏模糊');
+  if (s.barFloat) on.push('悬浮底栏');
+  return on.length ? on.join(' · ') : '全部关闭';
+}
+
+function paintSlider(input) {
+  const min = Number(input.min) || 0;
+  const max = Number(input.max) || 100;
+  const v = Number(input.value);
+  const p = max > min ? ((v - min) / (max - min)) * 100 : 0;
+  input.style.setProperty('--p', `${p.toFixed(2)}%`);
+}
+
+function applyAppearance() {
+  const s = S.settings;
+  const blurTop = s.barTopBlur && s.barTopPx > 0;
+  const blurNav = s.barNavBlur && s.barNavPx > 0;
+  const root = document.documentElement;
+
+  document.body.classList.toggle('has-top-blur', blurTop);
+  document.body.classList.toggle('has-nav-blur', blurNav);
+  document.body.classList.toggle('top-round', Boolean(s.roundTop));
+  document.body.classList.toggle('nav-floating', Boolean(s.barFloat));
+
+  root.style.setProperty('--top-blur', `${s.barTopPx}px`);
+  root.style.setProperty('--nav-blur', `${s.barNavPx}px`);
+}
+
+function renderAppearance() {
+  const s = S.settings;
+
+  $('apTopBlur').checked = s.barTopBlur;
+  $('apNavBlur').checked = s.barNavBlur;
+  $('apRoundTop').checked = s.roundTop;
+  $('apFloatNav').checked = s.barFloat;
+
+  $('apTopPx').value = s.barTopPx;
+  $('apNavPx').value = s.barNavPx;
+
+  $('apTopPx').disabled = !s.barTopBlur;
+  $('apNavPx').disabled = !s.barNavBlur;
+
+  $('apTopPxSlot').classList.toggle('is-off', !s.barTopBlur);
+  $('apNavPxSlot').classList.toggle('is-off', !s.barNavBlur);
+
+  $('apTopPxVal').textContent = `${s.barTopPx} px`;
+  $('apNavPxVal').textContent = `${s.barNavPx} px`;
+  $('apTopChip').textContent = s.roundTop ? '圆形' : '标准';
+
+  paintSlider($('apTopPx'));
+  paintSlider($('apNavPx'));
+
+  applyAppearance();
 }
 
 /* ---------- 更新检查 ---------- */
@@ -2449,12 +2576,14 @@ buildNav();
 
 const savedTheme = (() => { try { return localStorage.getItem('rpk-theme') || S.settings.theme; } catch { return S.settings.theme; } })();
 applyTheme(savedTheme);
+applyAppearance();
 renderKV();
 renderVerify();
 renderImages();
 renderForm();
 renderIdentity();
 renderSettingsPage();
+renderAppearance();
 renderHistory();
 updateAdvancedSummary();
 initConsent();
@@ -2688,6 +2817,38 @@ $('openStorage').addEventListener('click', async () => {
 });
 $('storageLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
 $('openTerms').addEventListener('click', () => openGate('view'));
+
+/* 顶栏与底栏 */
+$('openAppearance').addEventListener('click', () => openAppearancePane());
+$('apBack').addEventListener('click', () => closeAppearancePane());
+
+for (const [id, key] of [['apTopBlur', 'barTopBlur'], ['apNavBlur', 'barNavBlur'], ['apRoundTop', 'roundTop'], ['apFloatNav', 'barFloat']]) {
+  $(id).addEventListener('change', e => {
+    S.settings[key] = e.target.checked;
+    saveSettings();
+    renderAppearance();
+    renderSettingsPage();
+  });
+}
+
+for (const [id, key] of [['apTopPx', 'barTopPx'], ['apNavPx', 'barNavPx']]) {
+  $(id).addEventListener('input', e => {
+    S.settings[key] = Number(e.target.value);
+    renderAppearance();
+  });
+  $(id).addEventListener('change', () => {
+    saveSettings();
+    renderSettingsPage();
+  });
+}
+
+$('apReset').addEventListener('click', () => {
+  Object.assign(S.settings, APPEARANCE_DEFAULTS);
+  saveSettings();
+  renderAppearance();
+  renderSettingsPage();
+  snack('已恢复默认');
+});
 
 $('stRecord').addEventListener('change', e => { S.settings.record = e.target.checked; saveSettings(); });
 $('stFiles').addEventListener('change', e => { S.settings.storeFiles = e.target.checked; saveSettings(); });
