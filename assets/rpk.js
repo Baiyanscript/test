@@ -510,6 +510,30 @@ function readEmbedded(entry) {
   return { source: entry.name, jsc: false, text: td.decode(slice).slice(0, 200) };
 }
 
+/* ---------- META-INF/build.txt ---------- */
+function buildTxtFromManifest(manifest) {
+  let m = manifest || {};
+  try {
+    if (typeof m === 'string') m = JSON.parse(m);
+  } catch {}
+  const info = (m && m.packageInfo && typeof m.packageInfo === 'object') ? m.packageInfo : {};
+  const value = (key, fallback = '') => {
+    const v = info[key];
+    return v === undefined || v === null ? fallback : String(v);
+  };
+  const originType = m?.originType ?? info.originType ?? 'undefined';
+  return [
+    `originType=${originType}`,
+    `toolkit=${value('toolkit')}`,
+    `timeStamp=${value('timeStamp')}`,
+    `node=${value('node')}`,
+    `platform=${value('platform')}`,
+    `arch=${value('arch')}`,
+    `component=${value('component')}`,
+    ''
+  ].join('\n');
+}
+
 /* ---------- 重新打包 ---------- */
 
 export async function repack(pkg, patch, identity, onProgress) {
@@ -525,6 +549,27 @@ export async function repack(pkg, patch, identity, onProgress) {
 
   if (patch.manifestText) setText('manifest.json', patch.manifestText);
   if (patch.watchText) setText('manifest-watch.json', patch.watchText);
+
+  // 每次重新打包都自动生成 META-INF/build.txt；内容优先取本次编辑后的 manifest.json。
+  let buildManifest = pkg.manifest || null;
+  if (patch.manifestText) { try { buildManifest = JSON.parse(patch.manifestText); } catch {} }
+  const buildText = te.encode(buildTxtFromManifest(buildManifest));
+  let buildEntry = entries.find(x => x.name === 'META-INF/build.txt');
+  if (!entries.some(x => x.name === 'META-INF/')) {
+    entries.unshift({ name: 'META-INF/', data: new Uint8Array(0), isDir: true, method: 0, flags: 0, ...dosNow() });
+  }
+  if (!buildEntry) {
+    const now = dosNow();
+    buildEntry = { name: 'META-INF/build.txt', data: buildText, isDir: false, method: 8, flags: 0, ...now, reuseRaw: false, raw: null };
+    const metaIndex = entries.findIndex(x => x.name === 'META-INF/');
+    entries.splice(metaIndex + 1, 0, buildEntry);
+  } else {
+    buildEntry.data = buildText;
+    buildEntry.method = 8;
+    buildEntry.isDir = false;
+    buildEntry.reuseRaw = false;
+    buildEntry.raw = null;
+  }
 
   for (const [name, bytes] of Object.entries(patch.images || {})) {
     let e = entries.find(x => x.name === name);
