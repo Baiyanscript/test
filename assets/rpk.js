@@ -519,7 +519,16 @@ function buildTxtFromManifest(manifest) {
   const info = (m && m.packageInfo && typeof m.packageInfo === 'object') ? m.packageInfo : {};
   const value = (key, fallback = '') => {
     const v = info[key];
-    return v === undefined || v === null ? fallback : String(v);
+    if (v === undefined || v === null) return fallback;
+    const text = String(v);
+    // build.txt 的 timeStamp 比 manifest.json 晚 1 毫秒，例如 .998Z -> .999Z。
+    if (key === 'timeStamp') {
+      const parsed = Date.parse(text);
+      if (Number.isFinite(parsed)) {
+        try { return new Date(parsed + 1).toISOString(); } catch {}
+      }
+    }
+    return text;
   };
   const originType = m?.originType ?? info.originType ?? 'undefined';
   return [
@@ -550,25 +559,28 @@ export async function repack(pkg, patch, identity, onProgress) {
   if (patch.manifestText) setText('manifest.json', patch.manifestText);
   if (patch.watchText) setText('manifest-watch.json', patch.watchText);
 
-  // 每次重新打包都自动生成 META-INF/build.txt；内容优先取本次编辑后的 manifest.json。
-  let buildManifest = pkg.manifest || null;
-  if (patch.manifestText) { try { buildManifest = JSON.parse(patch.manifestText); } catch {} }
-  const buildText = te.encode(buildTxtFromManifest(buildManifest));
-  let buildEntry = entries.find(x => x.name === 'META-INF/build.txt');
-  if (!entries.some(x => x.name === 'META-INF/')) {
-    entries.unshift({ name: 'META-INF/', data: new Uint8Array(0), isDir: true, method: 0, flags: 0, ...dosNow() });
-  }
-  if (!buildEntry) {
+  // 只有介面顯示「未簽名」時，才清理舊 META-INF 並新增 build.txt。
+  // 已簽名的套件保留原本 build.txt；簽章產生流程仍會更新/建立 CERT。
+  const isDisplayedUnsigned = !pkg.verify;
+  if (isDisplayedUnsigned) {
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const normalized = String(entries[i].name || '').replace(/\\/g, '/');
+      if (/^META-INF(?:\/|$)/i.test(normalized)) entries.splice(i, 1);
+    }
+
+    // 從即將寫入套件的 manifest.json 讀取 packageInfo，避免時間格式轉換。
+    let buildManifest = pkg.manifest || null;
+    const finalManifestEntry = entries.find(x => x.name === 'manifest.json' && !x.isDir);
+    if (finalManifestEntry) {
+      try { buildManifest = JSON.parse(td.decode(finalManifestEntry.data)); } catch {}
+    }
     const now = dosNow();
-    buildEntry = { name: 'META-INF/build.txt', data: buildText, isDir: false, method: 8, flags: 0, ...now, reuseRaw: false, raw: null };
-    const metaIndex = entries.findIndex(x => x.name === 'META-INF/');
-    entries.splice(metaIndex + 1, 0, buildEntry);
-  } else {
-    buildEntry.data = buildText;
-    buildEntry.method = 8;
-    buildEntry.isDir = false;
-    buildEntry.reuseRaw = false;
-    buildEntry.raw = null;
+    entries.unshift({ name: 'META-INF/', data: new Uint8Array(0), isDir: true, method: 0, flags: 0, ...now });
+    entries.splice(1, 0, {
+      name: 'META-INF/build.txt',
+      data: te.encode(buildTxtFromManifest(buildManifest)),
+      isDir: false, method: 8, flags: 0, ...now, reuseRaw: false, raw: null
+    });
   }
 
   for (const [name, bytes] of Object.entries(patch.images || {})) {
