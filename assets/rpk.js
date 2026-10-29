@@ -519,16 +519,7 @@ function buildTxtFromManifest(manifest) {
   const info = (m && m.packageInfo && typeof m.packageInfo === 'object') ? m.packageInfo : {};
   const value = (key, fallback = '') => {
     const v = info[key];
-    if (v === undefined || v === null) return fallback;
-    const text = String(v);
-    // build.txt 的 timeStamp 比 manifest.json 晚 1 毫秒，例如 .998Z -> .999Z。
-    if (key === 'timeStamp') {
-      const parsed = Date.parse(text);
-      if (Number.isFinite(parsed)) {
-        try { return new Date(parsed + 1).toISOString(); } catch {}
-      }
-    }
-    return text;
+    return v === undefined || v === null ? fallback : String(v);
   };
   const originType = m?.originType ?? info.originType ?? 'undefined';
   return [
@@ -559,28 +550,23 @@ export async function repack(pkg, patch, identity, onProgress) {
   if (patch.manifestText) setText('manifest.json', patch.manifestText);
   if (patch.watchText) setText('manifest-watch.json', patch.watchText);
 
-  // 只有介面顯示「未簽名」時，才清理舊 META-INF 並新增 build.txt。
-  // 已簽名的套件保留原本 build.txt；簽章產生流程仍會更新/建立 CERT。
-  const isDisplayedUnsigned = !pkg.verify;
-  if (isDisplayedUnsigned) {
+  // 只有原包顯示「未簽名」時才重建 META-INF/build.txt。
+  // 未簽名包若殘留 build.txt、CERT 或其他 META-INF 內容，先清除整個 META-INF，避免把殘留簽章資料帶入新包。
+  // 已簽名包不自動新增或改寫 build.txt，保留原有 META-INF 內容，後續仍由既有流程更新 CERT/簽名。
+  const isUnsignedPackage = !pkg.sig?.present;
+  if (isUnsignedPackage) {
     for (let i = entries.length - 1; i >= 0; i--) {
-      const normalized = String(entries[i].name || '').replace(/\\/g, '/');
-      if (/^META-INF(?:\/|$)/i.test(normalized)) entries.splice(i, 1);
+      if (entries[i].name === 'META-INF' || entries[i].name.startsWith('META-INF/')) entries.splice(i, 1);
     }
 
-    // 從即將寫入套件的 manifest.json 讀取 packageInfo，避免時間格式轉換。
     let buildManifest = pkg.manifest || null;
-    const finalManifestEntry = entries.find(x => x.name === 'manifest.json' && !x.isDir);
-    if (finalManifestEntry) {
-      try { buildManifest = JSON.parse(td.decode(finalManifestEntry.data)); } catch {}
-    }
+    if (patch.manifestText) { try { buildManifest = JSON.parse(patch.manifestText); } catch {} }
+    const buildText = te.encode(buildTxtFromManifest(buildManifest));
     const now = dosNow();
-    entries.unshift({ name: 'META-INF/', data: new Uint8Array(0), isDir: true, method: 0, flags: 0, ...now });
-    entries.splice(1, 0, {
-      name: 'META-INF/build.txt',
-      data: te.encode(buildTxtFromManifest(buildManifest)),
-      isDir: false, method: 8, flags: 0, ...now, reuseRaw: false, raw: null
-    });
+    entries.unshift(
+      { name: 'META-INF/', data: new Uint8Array(0), isDir: true, method: 0, flags: 0, ...now },
+      { name: 'META-INF/build.txt', data: buildText, isDir: false, method: 8, flags: 0, ...now, reuseRaw: false, raw: null }
+    );
   }
 
   for (const [name, bytes] of Object.entries(patch.images || {})) {
