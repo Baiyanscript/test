@@ -529,8 +529,7 @@ function buildTxtFromManifest(manifest) {
     `node=${value('node')}`,
     `platform=${value('platform')}`,
     `arch=${value('arch')}`,
-    `component=${value('component')}`,
-    ''
+    `component=${value('component')}`
   ].join('\n');
 }
 
