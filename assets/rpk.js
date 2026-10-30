@@ -522,10 +522,17 @@ function buildTxtFromManifest(manifest) {
     return v === undefined || v === null ? fallback : String(v);
   };
   const originType = m?.originType ?? info.originType ?? 'undefined';
+  const manifestTimeStamp = value('timeStamp');
+  // build.txt 的 timeStamp 比 manifest.json 的 timeStamp 晚 1 毫秒。
+  const buildTimeStamp = (() => {
+    if (!manifestTimeStamp) return manifestTimeStamp;
+    const parsed = Date.parse(manifestTimeStamp);
+    return Number.isFinite(parsed) ? new Date(parsed + 1).toISOString() : manifestTimeStamp;
+  })();
   return [
     `originType=${originType}`,
     `toolkit=${value('toolkit')}`,
-    `timeStamp=${value('timeStamp')}`,
+    `timeStamp=${buildTimeStamp}`,
     `node=${value('node')}`,
     `platform=${value('platform')}`,
     `arch=${value('arch')}`,
