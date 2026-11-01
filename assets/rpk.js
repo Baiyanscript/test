@@ -362,12 +362,10 @@ async function signZip(zipBytes, fileHashes, key, certDer, pubDer, extraData = n
   const whole = concat([Uint8Array.of(0x5a), u32(3), h1, h2, h3]);
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', whole));
 
-  // signdata: digests + 证书 + 附加位
+  // signdata: digests + 证书；packageInfo JSON 不放入簽名區塊。
   const digestEntry = concat([u32(40), u32(0x0103), u32(32), digest]);
   const certEntry = concat([u32(certDer.length), certDer]);
-  // CERT 內層簽名資料的尾端附加 packageInfo JSON；外層 RPK 簽名不附加此欄位。
-  const extraBytes = extraData ? te.encode(typeof extraData === 'string' ? extraData : JSON.stringify(extraData)) : new Uint8Array(0);
-  const sd = concat([u32(digestEntry.length), digestEntry, u32(certEntry.length), certEntry, u32(extraBytes.length), extraBytes]);
+  const sd = concat([u32(digestEntry.length), digestEntry, u32(certEntry.length), certEntry]);
 
   const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, sd));
 
@@ -398,7 +396,12 @@ async function signZip(zipBytes, fileHashes, key, certDer, pubDer, extraData = n
   // 插入并修正中央目录偏移
   const newFooter = footer.slice();
   new DataView(newFooter.buffer).setUint32(16, cdOffset + sigBlock.length, true);
-  return concat([header, sigBlock, central, newFooter]);
+  const signedZip = concat([header, sigBlock, central, newFooter]);
+  // 附加資料必須位於整個 CERT ZIP/簽名區塊之後，成為 CERT 檔案真正的最後內容。
+  // 外層 RPK 簽名會對完整 CERT 位元組（包含此 JSON）計算摘要。
+  if (!extraData) return signedZip;
+  const extraBytes = te.encode(typeof extraData === 'string' ? extraData : JSON.stringify(extraData));
+  return concat([signedZip, extraBytes]);
 }
 
 /* ---------- 包解析 ---------- */
