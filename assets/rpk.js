@@ -344,7 +344,7 @@ async function segHash(bytes) {
  * 对一段 zip 生成签名块并插入到中央目录之前。
  * fileHashes: [{ name, hash }]
  */
-async function signZip(zipBytes, fileHashes, key, certDer, pubDer) {
+async function signZip(zipBytes, fileHashes, key, certDer, pubDer, extraData = null) {
   const v = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
   let eocd = -1;
   for (let i = zipBytes.length - 22; i >= 0; i--) {
@@ -365,7 +365,9 @@ async function signZip(zipBytes, fileHashes, key, certDer, pubDer) {
   // signdata: digests + 证书 + 附加位
   const digestEntry = concat([u32(40), u32(0x0103), u32(32), digest]);
   const certEntry = concat([u32(certDer.length), certDer]);
-  const sd = concat([u32(digestEntry.length), digestEntry, u32(certEntry.length), certEntry, u32(0)]);
+  // CERT 內層簽名資料的尾端附加 packageInfo JSON；外層 RPK 簽名不附加此欄位。
+  const extraBytes = extraData ? te.encode(typeof extraData === 'string' ? extraData : JSON.stringify(extraData)) : new Uint8Array(0);
+  const sd = concat([u32(digestEntry.length), digestEntry, u32(certEntry.length), certEntry, u32(extraBytes.length), extraBytes]);
 
   const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, sd));
 
@@ -510,7 +512,28 @@ function readEmbedded(entry) {
   return { source: entry.name, jsc: false, text: td.decode(slice).slice(0, 200) };
 }
 
-/* ---------- META-INF/build.txt ---------- */
+/* ---------- META-INF/build.txt / CERT 附加資訊 ---------- */
+function packageInfoFromManifest(manifest) {
+  let m = manifest || {};
+  try {
+    if (typeof m === 'string') m = JSON.parse(m);
+  } catch {}
+  const info = (m && m.packageInfo && typeof m.packageInfo === 'object') ? m.packageInfo : {};
+  const timestamp = info.timeStamp == null ? '' : String(info.timeStamp);
+  const parsed = Date.parse(timestamp);
+  const certTimeStamp = timestamp && Number.isFinite(parsed)
+    ? new Date(parsed + 1).toISOString()
+    : timestamp;
+  return {
+    toolkit: info.toolkit ?? '',
+    timeStamp: certTimeStamp,
+    node: info.node ?? '',
+    platform: info.platform ?? '',
+    arch: info.arch ?? '',
+    component: info.component ?? ''
+  };
+}
+
 function buildTxtFromManifest(manifest) {
   let m = manifest || {};
   try {
@@ -560,13 +583,13 @@ export async function repack(pkg, patch, identity, onProgress) {
   // 未簽名包若殘留 build.txt、CERT 或其他 META-INF 內容，先清除整個 META-INF，避免把殘留簽章資料帶入新包。
   // 已簽名包不自動新增或改寫 build.txt，保留原有 META-INF 內容，後續仍由既有流程更新 CERT/簽名。
   const isUnsignedPackage = !pkg.sig?.present;
+  let buildManifest = pkg.manifest || null;
+  if (patch.manifestText) { try { buildManifest = JSON.parse(patch.manifestText); } catch {} }
   if (isUnsignedPackage) {
     for (let i = entries.length - 1; i >= 0; i--) {
       if (entries[i].name === 'META-INF' || entries[i].name.startsWith('META-INF/')) entries.splice(i, 1);
     }
 
-    let buildManifest = pkg.manifest || null;
-    if (patch.manifestText) { try { buildManifest = JSON.parse(patch.manifestText); } catch {} }
     const buildText = te.encode(buildTxtFromManifest(buildManifest));
     const now = dosNow();
     entries.unshift(
@@ -620,7 +643,9 @@ export async function repack(pkg, patch, identity, onProgress) {
   const certZip = writeZip([{ name: 'hash.json', data: hashJson, isDir: false, method: 8, flags: 0, ...dosNow() }], '');
 
   const certHash = new Uint8Array(await crypto.subtle.digest('SHA-256', certZip));
-  const signedCert = await signZip(certZip, [{ name: 'hash.json', hash: certHash }], identity.key, identity.certDer, identity.pubDer);
+  // CERT 尾端使用 packageInfo JSON；timeStamp 與 build.txt 一樣比 manifest 晚 1 毫秒。
+  const certMetadata = packageInfoFromManifest(buildManifest);
+  const signedCert = await signZip(certZip, [{ name: 'hash.json', hash: certHash }], identity.key, identity.certDer, identity.pubDer, certMetadata);
 
   let certEntry = entries.find(e => e.name === CERT);
   if (!certEntry) {
