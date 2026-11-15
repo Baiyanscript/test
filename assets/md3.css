@@ -2092,3 +2092,12 @@ body.nav-floating .md-nav-bar.is-hidden { transform: translateY(calc(100% + 16px
 .md-advanced-image-preview { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 18px; background: var(--md-surface-container-low, var(--md-surface)); }
 .md-advanced-image-preview[hidden] { display: none; }
 .md-advanced-image-preview img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: auto; }
+
+
+/* ---------- app-release RPK/BIN 配置工具 ---------- */
+.md-release-preview-row { display:flex; align-items:center; gap:14px; min-width:0; }
+.md-release-preview { width:76px; height:76px; flex:0 0 76px; display:grid; place-items:center; overflow:hidden; border-radius:18px; background:var(--md-surface-2); border:1px solid var(--md-outline-variant); }
+.md-release-preview img { width:100%; height:100%; object-fit:contain; }
+#releaseIconGrid .md-tile { min-height:104px; }
+#releaseIconGrid .md-tile__img { width:52px; height:52px; }
+#releaseIconGrid .md-tile.is-selected { outline:2px solid var(--md-primary); outline-offset:-2px; }

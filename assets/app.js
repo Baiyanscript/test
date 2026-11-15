@@ -1,7 +1,7 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = window.__PAGE_VERSION__ || '20261108235500';
+const BUILD = window.__PAGE_VERSION__ || '20261115130000';
 const VERSION = { code: 2401, name: '2.4.1' };
 
 (function syncVersion() {
@@ -86,6 +86,13 @@ const S = {
   history: [],
   fileEdits: {},
 };
+
+const ReleaseTool = { pkg: null, fileName: '', iconBytes: null, iconLabel: '不修改图标', iconUrl: '', lastExport: null };
+const RELEASE_ICONS = [
+  ['aivs', '小爱同学'], ['bluetooth', '蓝牙'], ['camera', '遥控拍照'], ['card', '卡包'],
+  ['centre', '设备融合中心'], ['code', '代码'], ['findphone', '找手机'], ['interconnect', '多端联动'],
+  ['mijia', '米家'], ['music', '音乐'], ['mute', '手机静音'], ['weather', '天气'],
+];
 
 /* ---------- 提示 / 遮罩 ---------- */
 
@@ -2319,6 +2326,159 @@ function resizePng(bytes, w, h) {
   });
 }
 
+/* ---------- 工具箱：app-release RPK / BIN 图标与信息配置 ---------- */
+function releaseSetPreview(bytes, label, sizeText = '') {
+  const box = $('releaseIconPreview');
+  if (ReleaseTool.iconUrl) URL.revokeObjectURL(ReleaseTool.iconUrl);
+  ReleaseTool.iconUrl = '';
+  box.textContent = '';
+  if (bytes) {
+    const blob = new Blob([bytes], { type: 'image/png' });
+    ReleaseTool.iconUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.alt = label;
+    img.src = ReleaseTool.iconUrl;
+    box.appendChild(img);
+  } else {
+    box.appendChild(el('span', 'md-body-small md-muted', '原图标'));
+  }
+  $('releaseIconLabel').textContent = label;
+  $('releaseIconSize').textContent = sizeText || (bytes ? '已选择新图标' : '保留原图标');
+}
+
+function releaseRenderIcons() {
+  const grid = $('releaseIconGrid');
+  grid.textContent = '';
+  for (const [id, label] of RELEASE_ICONS) {
+    const tile = el('div', 'md-tile');
+    tile.dataset.icon = id;
+    const frame = el('div', 'md-tile__img');
+    const img = new Image();
+    img.src = `assets/toolbox-release-icons/${id}.png`;
+    img.alt = label;
+    img.loading = 'lazy';
+    frame.appendChild(img);
+    tile.append(frame, el('div', 'md-tile__name', label));
+    tile.addEventListener('click', async () => {
+      try {
+        const bytes = new Uint8Array(await (await fetch(`assets/toolbox-release-icons/${id}.png`)).arrayBuffer());
+        ReleaseTool.iconBytes = bytes;
+        ReleaseTool.iconLabel = label;
+        for (const item of grid.children) item.classList.toggle('is-selected', item === tile);
+        const size = pngSize(bytes);
+        releaseSetPreview(bytes, label, size ? `${size.w} × ${size.h} PNG` : 'PNG');
+      } catch (e) { snack(`读取内置图标失败：${e.message || e}`); }
+    });
+    grid.appendChild(tile);
+  }
+}
+
+function releaseResetConfig() {
+  const pkg = ReleaseTool.pkg;
+  if (!pkg?.manifest) return;
+  $('releaseName').value = pkg.manifest.name || '';
+  $('releasePackage').value = pkg.manifest.package || '';
+  $('releaseMatchSize').checked = true;
+  ReleaseTool.iconBytes = null;
+  ReleaseTool.iconLabel = '不修改图标';
+  for (const item of $('releaseIconGrid').children) item.classList.remove('is-selected');
+  const originalSize = pkg.icon ? pngSize(pkg.icon) : null;
+  releaseSetPreview(pkg.icon || null, '不修改图标', originalSize ? `保留原图标 · ${originalSize.w} × ${originalSize.h}` : '保留原图标');
+  $('releaseStatus').textContent = '配置已重置。';
+}
+
+async function releaseLoadFile(file) {
+  if (!file) return;
+  $('releaseStatus').textContent = '正在读取并检查文件…';
+  $('releaseFileInfo').textContent = file.name;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const pkg = await inspect(bytes, p => {
+      if (p.stage === 'verify') $('releaseStatus').textContent = `正在校验文件… ${p.done}/${p.total}`;
+    });
+    if (!pkg.manifest || !pkg.entries.some(e => e.name === 'manifest.json')) {
+      throw new Error('未找到有效的 manifest.json，不是可处理的 Vela RPK / BIN 文件');
+    }
+    if (!pkg.manifest.router) throw new Error('manifest.json 缺少 router 字段，无法按 app-release 规则处理');
+    if (!pkg.manifest.router.entry) throw new Error('manifest.json 缺少 router.entry，无法按 app-release 规则处理');
+    ReleaseTool.pkg = pkg;
+    ReleaseTool.fileName = file.name;
+    ReleaseTool.lastExport = null;
+    $('releaseConfigPanel').hidden = false;
+    $('releaseIconPanel').hidden = false;
+    $('releaseActions').hidden = false;
+    $('releaseShare').disabled = true;
+    $('releaseFileInfo').textContent = `${file.name} · ${fmtSize(bytes.length)} · ${pkg.entries.length} 项 · ${pkg.manifest.package || '未知包名'}`;
+    releaseResetConfig();
+    $('releaseStatus').textContent = pkg.sig?.present
+      ? '文件已载入。处理后会使用当前签名身份重新签名。'
+      : '文件已载入。处理后会使用当前签名身份生成签名。';
+  } catch (e) {
+    ReleaseTool.pkg = null;
+    $('releaseConfigPanel').hidden = true;
+    $('releaseIconPanel').hidden = true;
+    $('releaseActions').hidden = true;
+    $('releaseFileInfo').textContent = file.name;
+    $('releaseStatus').textContent = `读取失败：${e.message || e}`;
+    snack(`无法处理文件：${e.message || e}`);
+  }
+}
+
+async function releaseProcess() {
+  const pkg = ReleaseTool.pkg;
+  if (!pkg?.manifest) { snack('请先选择 RPK / BIN 文件'); return; }
+  if (!S.identity?.key || !S.identity?.certDer || !S.identity?.pubDer) {
+    snack('请先到「编辑 → 签名与导出」建立或导入签名身份');
+    return;
+  }
+  const name = $('releaseName').value.trim();
+  const packageName = $('releasePackage').value.trim();
+  if (!name) { snack('应用名称不能为空'); return; }
+  if (!/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(packageName)) {
+    snack('包名格式不正确，例如 com.example.app'); return;
+  }
+  const oldPackage = String(pkg.manifest.package || '');
+  if (packageName !== oldPackage && !confirm(`即将修改包名为：\n${packageName}\n\n这会导致手环上视为全新应用，旧应用数据不会自动迁移。是否继续？`)) return;
+
+  const manifest = { ...pkg.manifest, name, package: packageName };
+  const patch = { manifestText: JSON.stringify(manifest, null, 2) + '\n', images: {} };
+
+  const btn = $('releaseProcess');
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  showScrim('正在处理 RPK / BIN', '修改 manifest、图标并重新签名');
+  try {
+    if (ReleaseTool.iconBytes) {
+      const iconPath = String(manifest.icon || '/common/icon.png').replace(/^\//, '');
+      const target = pkg.icon ? pngSize(pkg.icon) : null;
+      const sourceSize = pngSize(ReleaseTool.iconBytes);
+      const w = $('releaseMatchSize').checked ? (target?.w || 96) : (sourceSize?.w || 96);
+      const h = $('releaseMatchSize').checked ? (target?.h || 96) : (sourceSize?.h || 96);
+      patch.images[iconPath] = await resizePng(ReleaseTool.iconBytes, w, h);
+    }
+    const out = await repack(pkg, patch, S.identity, p => {
+      if (p.stage === 'digest') setScrimProgress(p.done, p.total, '正在计算文件摘要');
+      else if (p.stage === 'prepare') setScrimProgress(p.done, p.total, '正在准备文件');
+    });
+    const base = ReleaseTool.fileName.replace(/\.(rpk|bin|zip)$/i, '');
+    const ext = /\.bin$/i.test(ReleaseTool.fileName) ? '.bin' : '.rpk';
+    const outName = `${base}-configured${ext}`;
+    ReleaseTool.lastExport = { name: outName, bytes: out };
+    await saveBlob(outName, out);
+    $('releaseShare').disabled = false;
+    $('releaseStatus').textContent = `处理完成：${outName} · ${fmtSize(out.length)}。已使用当前签名身份重新签名。`;
+    await addHistory({ kind: 'export', file: outName, pkg: manifest.package, name: manifest.name, version: manifest.versionName, size: out.length, verified: null }, out);
+    snack(`处理完成：${outName}`);
+  } catch (e) {
+    $('releaseStatus').textContent = `处理失败：${e.message || e}`;
+    snack(`处理失败：${e.message || e}`);
+  } finally {
+    hideScrim();
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+  }
+}
+
 /* ---------- 设置 ---------- */
 
 function applyTheme(choice) {
@@ -2780,6 +2940,46 @@ $('toolDisguise').addEventListener('click', async () => {
   openLayer('tb');
   await renderToolbox();
 });
+$('toolReleaseConfig').addEventListener('click', () => {
+  ReleaseTool.pkg = null;
+  ReleaseTool.fileName = '';
+  ReleaseTool.iconBytes = null;
+  ReleaseTool.lastExport = null;
+  $('releaseFileInfo').textContent = '尚未选择文件';
+  $('releaseConfigPanel').hidden = true;
+  $('releaseIconPanel').hidden = true;
+  $('releaseActions').hidden = true;
+  $('releaseFileInput').value = '';
+  $('releaseStatus').textContent = '选择文件后可配置。';
+  releaseRenderIcons();
+  openLayer('release');
+});
+$('releaseLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
+$('releasePickFile').addEventListener('click', () => $('releaseFileInput').click());
+$('releaseFileInput').addEventListener('change', e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) releaseLoadFile(file); });
+$('releaseCustomIcon').addEventListener('click', () => $('releaseIconInput').click());
+$('releaseIconInput').addEventListener('change', async e => {
+  const file = e.target.files?.[0]; e.target.value = ''; if (!file) return;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const size = pngSize(bytes);
+    if (!size && !/^image\//i.test(file.type)) throw new Error('请选择有效图片');
+    ReleaseTool.iconBytes = bytes;
+    ReleaseTool.iconLabel = file.name;
+    for (const item of $('releaseIconGrid').children) item.classList.remove('is-selected');
+    releaseSetPreview(bytes, file.name, size ? `${size.w} × ${size.h}` : '自定义图片');
+  } catch (err) { snack(`读取图片失败：${err.message || err}`); }
+});
+$('releaseKeepIcon').addEventListener('click', () => {
+  ReleaseTool.iconBytes = null; ReleaseTool.iconLabel = '不修改图标';
+  for (const item of $('releaseIconGrid').children) item.classList.remove('is-selected');
+  const original = ReleaseTool.pkg?.icon || null;
+  const originalSize = original ? pngSize(original) : null;
+  releaseSetPreview(original, '不修改图标', originalSize ? `保留原图标 · ${originalSize.w} × ${originalSize.h}` : '保留原图标');
+});
+$('releaseProcess').addEventListener('click', releaseProcess);
+$('releaseReset').addEventListener('click', releaseResetConfig);
+$('releaseShare').addEventListener('click', async () => { if (ReleaseTool.lastExport) await shareBlob(ReleaseTool.lastExport.name, ReleaseTool.lastExport.bytes); });
 $('tbLayer').querySelector('[data-back]').addEventListener('click', () => closeLayer());
 for (const b of $('tbTabs').children) {
   b.addEventListener('click', async () => {
