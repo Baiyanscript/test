@@ -7,11 +7,11 @@
 <link rel="icon" href="data:,">
 <meta name="color-scheme" content="light dark">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<link rel="stylesheet" href="assets/md3.css?v=20261108235500">
+<link rel="stylesheet" href="assets/md3.css?v=20261115130000">
 </head>
 <body>
 <div id="fatal" class="md-fatal" hidden></div>
-<script>window.__PAGE_VERSION__ = '20261108235500';</script>
+<script>window.__PAGE_VERSION__ = '20261115130000';</script>
 <script>
 window.addEventListener('error', function (e) {
   var bar = document.getElementById('fatal');
@@ -269,6 +269,15 @@ window.addEventListener('error', function (e) {
               <span class="md-grow">
                 <span class="md-body-medium md-block">系统应用伪装</span>
                 <span class="md-body-small md-muted md-block">套用系统应用的图标与名称</span>
+              </span>
+              <span class="md-setting-row__chev">›</span>
+            </button>
+            <div class="md-divider"></div>
+            <button class="md-setting-row" id="toolReleaseConfig" type="button">
+              <span class="md-setting-row__icon">RPK</span>
+              <span class="md-grow">
+                <span class="md-body-medium md-block">RPK / BIN 图标与信息配置</span>
+                <span class="md-body-small md-muted md-block">导入文件，修改名称、包名与图标</span>
               </span>
               <span class="md-setting-row__chev">›</span>
             </button>
@@ -641,6 +650,70 @@ window.addEventListener('error', function (e) {
   </div>
 </section>
 
+<!-- 工具箱：app-release RPK/BIN 图标与信息配置 -->
+<section class="md-layer" id="releaseLayer" data-layer="release" aria-hidden="true">
+  <header class="md-layer__bar">
+    <button class="md-btn md-btn--text md-advanced-back" type="button" data-back aria-label="上一層">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>
+      <span>上一層</span>
+    </button>
+    <div class="md-layer__titles">
+      <h2 class="md-layer__title">RPK / BIN 图标与信息配置</h2>
+      <p class="md-body-small md-muted">基于 app-release 功能整合</p>
+    </div>
+  </header>
+  <div class="md-layer__body">
+    <div class="md-layer__inner">
+      <div class="md-card md-card--outlined md-stack">
+        <div class="md-card__head"><span class="md-title-medium">选择文件</span></div>
+        <input id="releaseFileInput" type="file" accept=".rpk,.bin,.zip" hidden>
+        <button class="md-btn md-btn--outlined md-btn--block" id="releasePickFile" type="button">选择 RPK / BIN 文件</button>
+        <div class="md-body-small md-muted" id="releaseFileInfo">尚未选择文件</div>
+      </div>
+      <div class="md-card md-card--outlined md-stack" id="releaseConfigPanel" hidden>
+        <div class="md-card__head"><span class="md-title-medium">应用信息</span></div>
+        <label class="md-field md-field--dense">
+          <input id="releaseName" placeholder=" ">
+          <span>应用名称</span>
+        </label>
+        <label class="md-field md-field--dense">
+          <input id="releasePackage" placeholder=" " spellcheck="false">
+          <span>包名</span>
+        </label>
+        <p class="md-body-small md-muted">修改包名会使手环将应用视为全新应用，原有应用数据不会自动迁移。</p>
+      </div>
+      <div class="md-card md-card--outlined md-stack" id="releaseIconPanel" hidden>
+        <div class="md-card__head"><span class="md-title-medium">图标配置</span></div>
+        <div class="md-release-preview-row">
+          <div class="md-release-preview" id="releaseIconPreview"><span class="md-body-small md-muted">原图标</span></div>
+          <div class="md-grow">
+            <div class="md-body-medium" id="releaseIconLabel">不修改图标</div>
+            <div class="md-body-small md-muted" id="releaseIconSize">保留原图标</div>
+          </div>
+        </div>
+        <label class="md-switch-row">
+          <span><span class="md-body-medium">匹配原图标分辨率</span><span class="md-body-small md-muted md-block">自动缩放并居中，默认开启</span></span>
+          <span class="md-switch"><input type="checkbox" id="releaseMatchSize" checked><span class="md-switch__track"><span class="md-switch__thumb"></span></span></span>
+        </label>
+        <div class="md-row md-row--wrap">
+          <button class="md-btn md-btn--outlined" id="releaseCustomIcon" type="button">自定义图标</button>
+          <button class="md-btn md-btn--text" id="releaseKeepIcon" type="button">不修改</button>
+          <input id="releaseIconInput" type="file" accept="image/*" hidden>
+        </div>
+        <div class="md-title-small">内置图标</div>
+        <div class="md-grid md-grid--picker" id="releaseIconGrid"></div>
+      </div>
+      <div class="md-card md-card--outlined md-stack" id="releaseActions" hidden>
+        <p class="md-body-small md-muted" id="releaseStatus">选择文件后可配置。导出时会使用 RPK Studio 当前的签名身份。</p>
+        <button class="md-btn md-btn--filled md-btn--block" id="releaseProcess" type="button">处理并导出</button>
+        <button class="md-btn md-btn--outlined md-btn--block" id="releaseReset" type="button">重置配置</button>
+        <button class="md-btn md-btn--text md-btn--block" id="releaseShare" type="button" disabled>分享最近处理结果</button>
+      </div>
+      <div class="md-notice">此功能在本机处理 RPK / BIN 文件。不会把文件上传到服务器。若需要重新签名，请先在「编辑 → 签名与导出」建立或导入签名身份。</div>
+    </div>
+  </div>
+</section>
+
 <!-- 设置：历史与存储 -->
 <section class="md-layer" id="storageLayer" data-layer="storage" aria-hidden="true">
   <header class="md-layer__bar">
@@ -770,6 +843,6 @@ window.addEventListener('error', function (e) {
 
 <div class="md-snackbar" id="snackbar" role="status" aria-live="polite"></div>
 
-<script type="module" src="assets/app.js?v=20261108235500"></script>
+<script type="module" src="assets/app.js?v=20261115130000"></script>
 </body>
 </html>
