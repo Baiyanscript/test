@@ -650,7 +650,7 @@ window.addEventListener('error', function (e) {
   </div>
 </section>
 
-<!-- 工具箱：app-release RPK/BIN 图标与信息配置 -->
+<!-- 工具箱：app-release 完整功能整合 -->
 <section class="md-layer" id="releaseLayer" data-layer="release" aria-hidden="true">
   <header class="md-layer__bar">
     <button class="md-btn md-btn--text md-advanced-back" type="button" data-back aria-label="上一層">
@@ -659,59 +659,45 @@ window.addEventListener('error', function (e) {
     </button>
     <div class="md-layer__titles">
       <h2 class="md-layer__title">RPK / BIN 图标与信息配置</h2>
-      <p class="md-body-small md-muted">基于 app-release 功能整合</p>
+      <p class="md-body-small md-muted">app-release 功能移植</p>
     </div>
   </header>
-  <div class="md-layer__body">
-    <div class="md-layer__inner">
-      <div class="md-card md-card--outlined md-stack">
-        <div class="md-card__head"><span class="md-title-medium">选择文件</span></div>
-        <input id="releaseFileInput" type="file" accept=".rpk,.bin,.zip" hidden>
-        <button class="md-btn md-btn--outlined md-btn--block" id="releasePickFile" type="button">选择 RPK / BIN 文件</button>
-        <div class="md-body-small md-muted" id="releaseFileInfo">尚未选择文件</div>
+  <div class="md-layer__body"><div class="md-layer__inner">
+    <div class="md-card md-card--outlined md-stack">
+      <div class="md-card__head"><span class="md-title-medium">设备版本</span></div>
+      <div class="md-release-device" role="group" aria-label="设备版本">
+        <label class="md-release-device__option"><input type="radio" name="releaseDeviceType" value="normal" checked><span><strong>普通版</strong><small>NORMAL · 192</small></span></label>
+        <label class="md-release-device__option"><input type="radio" name="releaseDeviceType" value="pro"><span><strong>Pro 版</strong><small>PRO · 336</small></span></label>
       </div>
-      <div class="md-card md-card--outlined md-stack" id="releaseConfigPanel" hidden>
-        <div class="md-card__head"><span class="md-title-medium">应用信息</span></div>
-        <label class="md-field md-field--dense">
-          <input id="releaseName" placeholder=" ">
-          <span>应用名称</span>
-        </label>
-        <label class="md-field md-field--dense">
-          <input id="releasePackage" placeholder=" " spellcheck="false">
-          <span>包名</span>
-        </label>
-        <p class="md-body-small md-muted">修改包名会使手环将应用视为全新应用，原有应用数据不会自动迁移。</p>
-      </div>
-      <div class="md-card md-card--outlined md-stack" id="releaseIconPanel" hidden>
-        <div class="md-card__head"><span class="md-title-medium">图标配置</span></div>
-        <div class="md-release-preview-row">
-          <div class="md-release-preview" id="releaseIconPreview"><span class="md-body-small md-muted">原图标</span></div>
-          <div class="md-grow">
-            <div class="md-body-medium" id="releaseIconLabel">不修改图标</div>
-            <div class="md-body-small md-muted" id="releaseIconSize">保留原图标</div>
-          </div>
-        </div>
-        <label class="md-switch-row">
-          <span><span class="md-body-medium">匹配原图标分辨率</span><span class="md-body-small md-muted md-block">自动缩放并居中，默认开启</span></span>
-          <span class="md-switch"><input type="checkbox" id="releaseMatchSize" checked><span class="md-switch__track"><span class="md-switch__thumb"></span></span></span>
-        </label>
-        <div class="md-row md-row--wrap">
-          <button class="md-btn md-btn--outlined" id="releaseCustomIcon" type="button">自定义图标</button>
-          <button class="md-btn md-btn--text" id="releaseKeepIcon" type="button">不修改</button>
-          <input id="releaseIconInput" type="file" accept="image/*" hidden>
-        </div>
-        <div class="md-title-small">内置图标</div>
-        <div class="md-grid md-grid--picker" id="releaseIconGrid"></div>
-      </div>
-      <div class="md-card md-card--outlined md-stack" id="releaseActions" hidden>
-        <p class="md-body-small md-muted" id="releaseStatus">选择文件后可配置。导出时会使用 RPK Studio 当前的签名身份。</p>
-        <button class="md-btn md-btn--filled md-btn--block" id="releaseProcess" type="button">处理并导出</button>
-        <button class="md-btn md-btn--outlined md-btn--block" id="releaseReset" type="button">重置配置</button>
-        <button class="md-btn md-btn--text md-btn--block" id="releaseShare" type="button" disabled>分享最近处理结果</button>
-      </div>
-      <div class="md-notice">此功能在本机处理 RPK / BIN 文件。不会把文件上传到服务器。若需要重新签名，请先在「编辑 → 签名与导出」建立或导入签名身份。</div>
     </div>
-  </div>
+    <div class="md-card md-card--outlined md-stack">
+      <div class="md-card__head"><span class="md-title-medium">选择文件</span></div>
+      <input id="releaseFileInput" type="file" accept=".rpk,.bin" hidden>
+      <button class="md-btn md-btn--outlined md-btn--block" id="releasePickFile" type="button">选择 RPK / BIN 文件</button>
+      <div class="md-body-small md-muted" id="releaseFileInfo">尚未选择文件</div>
+    </div>
+    <div class="md-card md-card--outlined md-stack" id="releaseConfigPanel" hidden>
+      <div class="md-card__head"><span class="md-title-medium">应用信息</span></div>
+      <label class="md-field md-field--dense"><input id="releaseName" placeholder="留空则保留原名称"><span>应用名称（可选）</span></label>
+      <label class="md-field md-field--dense"><input id="releasePackage" placeholder="留空则保留原包名" spellcheck="false"><span>套件名称 / 包名（可选）</span></label>
+      <p class="md-body-small md-muted">修改包名会使设备将应用视为全新应用，原有应用数据不会自动迁移。</p>
+    </div>
+    <div class="md-card md-card--outlined md-stack" id="releaseIconPanel" hidden>
+      <div class="md-card__head"><span class="md-title-medium">应用图标</span></div>
+      <div class="md-release-preview-row"><div class="md-release-preview" id="releaseIconPreview"><span class="md-body-small md-muted">原图标</span></div><div class="md-grow"><div class="md-body-medium" id="releaseIconLabel">不修改图标</div><div class="md-body-small md-muted" id="releaseIconSize">保留原图标</div></div></div>
+      <p class="md-body-small md-muted">自定义图标建议使用 96 × 96。尺寸不一致时可选择匹配原图、忽略尺寸或取消。</p>
+      <div class="md-row md-row--wrap"><button class="md-btn md-btn--outlined" id="releaseCustomIcon" type="button">自定义图标</button><button class="md-btn md-btn--text" id="releaseKeepIcon" type="button">不修改图标</button><input id="releaseIconInput" type="file" accept="image/*" hidden></div>
+      <div class="md-title-small">内置图标</div><div class="md-grid md-grid--picker" id="releaseIconGrid"></div>
+    </div>
+    <div class="md-card md-card--outlined md-stack" id="releaseActions" hidden>
+      <p class="md-body-small md-muted" id="releaseStatus">选择文件后可配置。</p>
+      <button class="md-btn md-btn--filled md-btn--block" id="releaseProcess" type="button">处理并导出</button>
+      <div class="md-row md-row--wrap"><button class="md-btn md-btn--outlined md-grow" id="releaseSaveConfig" type="button">保存配置</button><button class="md-btn md-btn--outlined md-grow" id="releaseReset" type="button">重置配置</button></div>
+      <button class="md-btn md-btn--text md-btn--block" id="releaseShare" type="button" disabled>分享最近处理结果</button>
+    </div>
+    <div class="md-notice">本机处理文件，不会上传到服务器。输出签名使用 RPK Studio 当前身份；请先在「编辑 → 签名与导出」建立或导入签名身份。</div>
+  </div></div>
+  <div class="md-release-dialog-backdrop" id="releaseSizeDialog" hidden><div class="md-card md-stack md-release-dialog" role="dialog" aria-modal="true" aria-labelledby="releaseSizeTitle"><h3 class="md-title-medium" id="releaseSizeTitle">图标尺寸不一致</h3><p class="md-body-small" id="releaseSizeMessage">要将图标匹配原图标尺寸吗？</p><button class="md-btn md-btn--filled md-btn--block" id="releaseSizeMatch" type="button">匹配原图尺寸</button><button class="md-btn md-btn--outlined md-btn--block" id="releaseSizeIgnore" type="button">忽略，保留图片尺寸</button><button class="md-btn md-btn--text md-btn--block" id="releaseSizeCancel" type="button">取消</button></div></div>
 </section>
 
 <!-- 设置：历史与存储 -->
@@ -843,6 +829,6 @@ window.addEventListener('error', function (e) {
 
 <div class="md-snackbar" id="snackbar" role="status" aria-live="polite"></div>
 
-<script type="module" src="assets/app.js?v=20261115130000"></script>
+<script type="module" src="assets/app.js?v=20261116230000"></script>
 </body>
 </html>
