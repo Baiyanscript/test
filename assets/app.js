@@ -1,7 +1,7 @@
 import { inspect, repack, createIdentity, importPrivateKey, parseCertificate, sha256, pngSize } from './rpk.js';
 import { readZip, dataOf, crc32 } from './zip.js';
 
-const BUILD = window.__PAGE_VERSION__ || '20261116230000';
+const BUILD = window.__PAGE_VERSION__ || '20261117003000';
 const VERSION = { code: 2401, name: '2.4.1' };
 
 (function syncVersion() {
@@ -2457,28 +2457,38 @@ function releaseLoadConfig() {
     for (const radio of document.querySelectorAll('input[name="releaseDeviceType"]')) radio.checked = radio.value === ReleaseTool.deviceType;
   } catch {}
 }
+function releaseFormatNumber(value) {
+  if (!Number.isFinite(value)) return String(value);
+  return String(Math.round(value * 100) / 100);
+}
 function releaseScalePx(source, factor) {
   if (!Number.isFinite(factor) || factor <= 0 || Math.abs(factor - 1) < 0.0001) return source;
-  return source.replace(/(\d+(?:\.\d+)?)px\b/g, (all, n) => `${Math.max(0, Math.round(Number(n) * factor * 100) / 100)}px`);
+  return source.replace(/(\d+\.?\d*)\s*px\b/g, (all, n) => `${releaseFormatNumber(Number(n) * factor)}px`);
 }
 function releaseScaleNumbersInContext(source, fromWidth, toWidth) {
   const factor = fromWidth > 0 ? toWidth / fromWidth : 1;
-  return releaseScalePx(source, factor);
-}
-function releaseRouteTarget(manifest, entries) {
-  const raw = String(manifest?.router?.entry || '').replace(/^\/+/, '').replace(/\\/g, '/');
-  if (!raw) throw new Error('manifest.json 缺少 router.entry');
-  const base = raw.replace(/\.(?:js|jsc)$/i, '');
-  const jsPath = `${base}.js`;
-  const jscPath = `${base}.jsc`;
-  if (entries.some(e => e.name === jsPath && !e.isDir)) return jsPath;
-  // BLT 是 JavaScript 页面模块；若原入口只有 JSC，改用同一路径的 JS 页面并更新 router.entry。
-  if (entries.some(e => e.name === jscPath && !e.isDir) || /\.jsc$/i.test(raw)) {
-    manifest.router = { ...(manifest.router || {}), entry: base.startsWith('/') ? base : `/${base}` };
-    return jsPath;
+  let result = releaseScalePx(source, factor);
+  if (Number.isFinite(factor) && factor > 0 && Math.abs(factor - 1) >= 0.0001) {
+    result = result.replace(/(["'])\s*[:=]\s*(\d+\.?\d*)(?=[\s,}\n\r])/g,
+      (all, quote, number) => `${quote}: ${releaseFormatNumber(Number(number) * factor)}`);
   }
-  if (entries.some(e => e.name === raw && !e.isDir) && /\.js$/i.test(raw)) return raw;
-  return jsPath;
+  // app-release 會將頁面模組內的 uri 路徑統一改成根路徑，即使縮放比例為 1 也會執行。
+  result = result.replace(/(uri["']?\s*[:=]\s*["']+)\/[^"']*(["']?)/gi, '$1/$2');
+  return result;
+}
+// 與 app-release 的 RpkProcessor.modifyManifest() 一致：
+// router.entry 固定指向 pages/blt，並在 router.pages 中註冊 BLT 元件。
+function releaseApplyManifest(manifest, name, packageName) {
+  const next = JSON.parse(JSON.stringify(manifest || {}));
+  if (name) next.name = name;
+  if (packageName) next.package = packageName;
+  const router = next.router && typeof next.router === 'object' ? { ...next.router } : {};
+  const pages = router.pages && typeof router.pages === 'object' ? { ...router.pages } : {};
+  router.entry = 'pages/blt';
+  pages['pages/blt'] = { component: 'blt' };
+  router.pages = pages;
+  next.router = router;
+  return next;
 }
 function releaseResolveIconChoice(sourceSize, targetSize) {
   if (!sourceSize || !targetSize || (sourceSize.w === targetSize.w && sourceSize.h === targetSize.h)) return Promise.resolve('match');
@@ -2516,11 +2526,14 @@ async function releaseProcess() {
   const oldPackage = String(pkg.manifest.package || '');
   if (packageName && packageName !== oldPackage && !confirm(`即将修改包名为：\n${packageName}\n\n这会导致设备将应用视为全新应用，旧应用数据不会自动迁移。是否继续？`)) return;
 
-  const manifest = { ...pkg.manifest };
-  if (name) manifest.name = name;
-  if (packageName) manifest.package = packageName;
-  manifest.designWidth = releaseDeviceWidth();
+  const manifest = releaseApplyManifest(pkg.manifest, name, packageName);
   const patch = { manifestText: JSON.stringify(manifest, null, 2) + '\n', images: {}, files: {} };
+  // app-release 也會同步修改存在的 manifest-watch.json。
+  if (pkg.entries.some(e => e.name === 'manifest-watch.json' && !e.isDir)) {
+    if (!pkg.watch) throw new Error('manifest-watch.json 格式無效，app-release 無法修改');
+    const watchManifest = releaseApplyManifest(pkg.watch, name, packageName);
+    patch.watchText = JSON.stringify(watchManifest, null, 2) + '\n';
+  }
   const btn = $('releaseProcess');
   btn.disabled = true; btn.classList.add('is-loading');
   showScrim('正在处理 RPK / BIN', '注入设备页面、修改信息与图标并重新签名');
@@ -2529,10 +2542,11 @@ async function releaseProcess() {
     const scriptResponse = await fetch(scriptAsset, { cache: 'no-store' });
     if (!scriptResponse.ok) throw new Error(`无法读取 ${ReleaseTool.deviceType === 'pro' ? 'Pro' : '普通'}版页面资源`);
     let bltSource = await scriptResponse.text();
-    const sourceWidth = ReleaseTool.deviceType === 'pro' ? 336 : 192;
+    const sourceWidth = Number(pkg.manifest?.config?.designWidth) || (ReleaseTool.deviceType === 'pro' ? 336 : 192);
     bltSource = releaseScaleNumbersInContext(bltSource, sourceWidth, releaseDeviceWidth());
-    const routeFile = releaseRouteTarget(manifest, pkg.entries);
-    patch.files[routeFile] = new TextEncoder().encode(bltSource);
+    // app-release 將原始資源檔名保留在 pages/blt/ 下，不覆寫原 router.entry 檔案。
+    const scriptName = ReleaseTool.deviceType === 'pro' ? 'bltpro.js' : 'blt.js';
+    patch.files[`pages/blt/${scriptName}`] = new TextEncoder().encode(bltSource);
     const bluetoothResponse = await fetch('assets/toolbox-release-core/bluetooth.png', { cache: 'no-store' });
     if (bluetoothResponse.ok) patch.images['common/bluetooth.png'] = new Uint8Array(await bluetoothResponse.arrayBuffer());
 
