@@ -2472,8 +2472,7 @@ function releaseScaleNumbersInContext(source, fromWidth, toWidth) {
     result = result.replace(/(["'])\s*[:=]\s*(\d+\.?\d*)(?=[\s,}\n\r])/g,
       (all, quote, number) => `${quote}: ${releaseFormatNumber(Number(number) * factor)}`);
   }
-  // app-release 會將頁面模組內的 uri 路徑統一改成根路徑，即使縮放比例為 1 也會執行。
-  result = result.replace(/(uri["']?\s*[:=]\s*["']+)\/[^"']*(["']?)/gi, '$1/$2');
+  // 保留 uri 的完整路徑；BLT 返回目標已在封裝前替換為原始 router.entry。
   return result;
 }
 // 與 app-release 的 RpkProcessor.modifyManifest() 一致：
