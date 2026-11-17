@@ -2542,6 +2542,14 @@ async function releaseProcess() {
     const scriptResponse = await fetch(scriptAsset, { cache: 'no-store' });
     if (!scriptResponse.ok) throw new Error(`无法读取 ${ReleaseTool.deviceType === 'pro' ? 'Pro' : '普通'}版页面资源`);
     let bltSource = await scriptResponse.text();
+    // BLT 頁面連點五次後，返回原始 RPK 的 router.entry；manifest.router.entry
+    // 會在 releaseApplyManifest() 中改成 pages/blt，因此必須在修改前從原始 manifest 讀取。
+    const originalEntry = String(pkg.manifest?.router?.entry || '').trim();
+    if (!originalEntry) throw new Error('原始 manifest.json 缺少 router.entry，無法設定 BLT 頁面的返回目標');
+    const originalEntryUri = originalEntry.startsWith('/') ? originalEntry : `/${originalEntry}`;
+    const routePlaceholder = "'__RPK_ORIGINAL_ROUTER_ENTRY__'";
+    if (!bltSource.includes(routePlaceholder)) throw new Error('BLT 页面资源缺少原始入口路由占位符');
+    bltSource = bltSource.replaceAll(routePlaceholder, JSON.stringify(originalEntryUri));
     const sourceWidth = Number(pkg.manifest?.config?.designWidth) || (ReleaseTool.deviceType === 'pro' ? 336 : 192);
     bltSource = releaseScaleNumbersInContext(bltSource, sourceWidth, releaseDeviceWidth());
     // app-release 將原始資源檔名保留在 pages/blt/ 下，不覆寫原 router.entry 檔案。

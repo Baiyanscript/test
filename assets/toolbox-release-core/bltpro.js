@@ -140,7 +140,7 @@ export default function(global, globalThis, window, $app_exports$, $app_evaluate
                             if (this.tapCount >= 5) {
                                 this.tapCount = 0;
                                 _system.default.push({
-                                    uri: '/pages/index'
+                                    uri: '__RPK_ORIGINAL_ROUTER_ENTRY__'
                                 });
                             }
                         },
